@@ -9,4 +9,5 @@ public interface IAuthenticationService
     Task<AuthResponseDto> GoogleLoginAsync(GoogleLoginRequestDto request, CancellationToken ct = default);
     Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenRequestDto request, CancellationToken ct = default);
     Task LogoutAsync(Guid userId, CancellationToken ct = default);
+    Task ChangePasswordAsync(Guid userId, ChangePasswordRequestDto request, CancellationToken ct = default);
 }
