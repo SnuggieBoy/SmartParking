@@ -23,6 +23,8 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
 
     public virtual DbSet<ParkingLot> ParkingLots { get; set; }
 
+    public virtual DbSet<ParkingLocation> ParkingLocations { get; set; }
+
     public virtual DbSet<PaymentLog> PaymentLogs { get; set; }
 
     public virtual DbSet<PaymentTransaction> PaymentTransactions { get; set; }
@@ -240,6 +242,41 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__Vehicles__UserId__12345678");
+        });
+
+        modelBuilder.Entity<ParkingLocation>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Id).HasDefaultValueSql("(newid())");
+            entity.Property(e => e.Name)
+                .IsRequired()
+                .HasMaxLength(100);
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.Latitude).IsRequired();
+            entity.Property(e => e.Longitude).IsRequired();
+            entity.Property(e => e.Province)
+                .IsRequired()
+                .HasMaxLength(100);
+            entity.Property(e => e.District)
+                .IsRequired()
+                .HasMaxLength(100);
+            entity.Property(e => e.Ward)
+                .IsRequired()
+                .HasMaxLength(100);
+            entity.Property(e => e.Street).HasMaxLength(200);
+            entity.Property(e => e.Area).HasMaxLength(100);
+            entity.Property(e => e.FullAddress).HasMaxLength(500);
+            entity.Property(e => e.TotalSlots).IsRequired();
+            entity.Property(e => e.AvailableSlots).IsRequired();
+            entity.Property(e => e.PricePerHour)
+                .IsRequired()
+                .HasColumnType("decimal(10, 2)");
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
+
+            // Index for active locations query optimization
+            entity.HasIndex(e => e.IsActive);
         });
 
         OnModelCreatingPartial(modelBuilder);

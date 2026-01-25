@@ -26,6 +26,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<IParkingLotRepository, ParkingLotRepository>();
         services.AddScoped<IVehicleRepository, VehicleRepository>();
+        services.AddScoped<IParkingLocationRepository, ParkingLocationRepository>();
 
         // Services
         services.AddScoped<IVnPayService, VnPayService>();

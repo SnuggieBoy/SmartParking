@@ -23,6 +23,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBookingService, BookingService>();
         services.AddScoped<IVehicleService, VehicleService>();
         services.AddScoped<IPaymentService, PaymentService>();
+        services.AddScoped<IParkingLocationService, ParkingLocationService>();
         
         services.AddHttpClient<IGoogleAuthService, GoogleAuthService>();
 

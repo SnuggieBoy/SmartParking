@@ -69,6 +69,16 @@ public static class Messages
         public const string MaxLength = "{0} must not exceed {1} characters";
     }
 
+    public static class ParkingLocationMessages
+    {
+        public const string CreateSuccess = "Parking location created successfully";
+        public const string NotFound = "Parking location not found";
+        public const string InvalidCoordinates = "Invalid latitude or longitude coordinates";
+        public const string InvalidRadius = "Search radius must be greater than 0";
+        public const string NearbyRetrieved = "Nearby parking locations retrieved successfully";
+        public const string AllRetrieved = "All parking locations retrieved successfully";
+    }
+
     public static class Common
     {
         public const string Success = "Request completed successfully";
