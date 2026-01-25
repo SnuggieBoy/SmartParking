@@ -19,6 +19,10 @@ if (app.Environment.IsDevelopment())
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "SmartParking API V1");
     });
+
+    // Auto-redirect root path to Swagger UI
+    app.MapGet("/", () => Results.Redirect("/swagger"))
+        .ExcludeFromDescription();
 }
 
 app.UseCors();
