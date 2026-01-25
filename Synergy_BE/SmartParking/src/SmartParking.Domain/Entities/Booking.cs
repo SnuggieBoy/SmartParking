@@ -29,6 +29,10 @@ public partial class Booking
 
     public DateTime? UpdatedAt { get; set; }
 
+    public DateTime? CheckInTime { get; set; }
+
+    public DateTime? CheckOutTime { get; set; }
+
     public byte[] RowVersion { get; set; }
 
     public virtual ParkingLot ParkingLot { get; set; }

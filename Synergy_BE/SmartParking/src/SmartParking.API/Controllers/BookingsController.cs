@@ -81,6 +81,34 @@ public sealed class BookingsController : ControllerBase
         return Ok(ApiResponse.SuccessResponse(Messages.Booking.CancelSuccess));
     }
 
+    [Authorize(Roles = $"{AuthConstants.Roles.User},{AuthConstants.Roles.Admin}")]
+    [HttpPost("{id:guid}/check-in")]
+    [ProducesResponseType(typeof(ApiResponse<BookingCheckInResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<BookingCheckInResponseDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<BookingCheckInResponseDto>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<BookingCheckInResponseDto>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<BookingCheckInResponseDto>>> CheckIn(Guid id, CancellationToken ct = default)
+    {
+        var userId = GetUserIdFromToken();
+        var isAdmin = User.IsInRole(AuthConstants.Roles.Admin);
+        var result = await _bookingService.BookingCheckInAsync(id, userId, isAdmin, ct);
+        return Ok(ApiResponse<BookingCheckInResponseDto>.SuccessResponse(result, Messages.Booking.CheckInSuccess));
+    }
+
+    [Authorize(Roles = $"{AuthConstants.Roles.User},{AuthConstants.Roles.Admin}")]
+    [HttpPost("{id:guid}/check-out")]
+    [ProducesResponseType(typeof(ApiResponse<BookingCheckOutResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<BookingCheckOutResponseDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<BookingCheckOutResponseDto>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<BookingCheckOutResponseDto>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<BookingCheckOutResponseDto>>> CheckOut(Guid id, CancellationToken ct = default)
+    {
+        var userId = GetUserIdFromToken();
+        var isAdmin = User.IsInRole(AuthConstants.Roles.Admin);
+        var result = await _bookingService.BookingCheckOutAsync(id, userId, isAdmin, ct);
+        return Ok(ApiResponse<BookingCheckOutResponseDto>.SuccessResponse(result, Messages.Booking.CheckOutSuccess));
+    }
+
     private Guid GetUserIdFromToken()
     {
         var userIdClaim = User.FindFirstValue(JwtRegisteredClaimNames.Sub);

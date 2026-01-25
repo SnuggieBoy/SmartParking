@@ -16,6 +16,9 @@ if (app.Environment.IsDevelopment())
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "SmartParking API V1");
     });
+
+    // Convenience: redirect root to Swagger in development
+    app.MapGet("/", () => Results.Redirect("/swagger"));
 }
 
 app.UseCors();

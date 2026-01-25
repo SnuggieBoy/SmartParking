@@ -34,6 +34,11 @@ public sealed class ExceptionHandlingMiddleware : IMiddleware
 
         var (statusCode, message, errors) = exception switch
         {
+            BusinessException businessEx => (
+                businessEx.StatusCode,
+                businessEx.Message,
+                businessEx.Errors?.ToArray() ?? new[] { businessEx.Message }
+            ),
             BadRequestException badRequestEx => (
                 HttpStatusCode.BadRequest,
                 badRequestEx.Message,

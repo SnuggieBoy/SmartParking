@@ -15,10 +15,12 @@ namespace SmartParking.API.Controllers;
 public sealed class PaymentController : ControllerBase
 {
     private readonly IVnPayService _vnPayService;
+    private readonly IPaymentService _paymentService;
 
-    public PaymentController(IVnPayService vnPayService)
+    public PaymentController(IVnPayService vnPayService, IPaymentService paymentService)
     {
         _vnPayService = vnPayService;
+        _paymentService = paymentService;
     }
 
     [Authorize]
@@ -58,6 +60,24 @@ public sealed class PaymentController : ControllerBase
         }
 
         return Redirect($"/payment-failed?txnRef={callback.vnp_TxnRef}");
+    }
+
+    [Authorize]
+    [HttpGet("booking/{bookingId:guid}")]
+    [ProducesResponseType(typeof(ApiResponse<PaymentStatusDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<PaymentStatusDto>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<PaymentStatusDto>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<PaymentStatusDto>>> GetPaymentStatusByBooking(Guid bookingId, CancellationToken ct)
+    {
+        var userIdClaim = User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
+        {
+            return Unauthorized(ApiResponse<PaymentStatusDto>.FailureResponse(Messages.Common.Unauthorized));
+        }
+
+        var isAdmin = User.IsInRole(AuthConstants.Roles.Admin);
+        var dto = await _paymentService.GetPaymentStatusByBookingAsync(bookingId, userId, isAdmin, ct);
+        return Ok(ApiResponse<PaymentStatusDto>.SuccessResponse(dto, Messages.Payment.PaymentStatusRetrieved));
     }
 }
 

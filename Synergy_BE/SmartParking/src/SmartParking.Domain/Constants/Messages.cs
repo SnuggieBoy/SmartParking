@@ -31,10 +31,14 @@ public static class Messages
         public const string CreateSuccess = "Booking created successfully";
         public const string UpdateSuccess = "Booking updated successfully";
         public const string CancelSuccess = "Booking cancelled successfully";
+        public const string CheckInSuccess = "Checked in successfully";
+        public const string CheckOutSuccess = "Checked out successfully";
         public const string NotFound = "Booking not found";
         public const string AlreadyCancelled = "Booking is already cancelled";
         public const string CannotCancel = "Cannot cancel this booking";
         public const string NoAvailableSlots = "No available slots";
+        public const string InvalidStatusForCheckIn = "Booking status is not valid for check-in";
+        public const string InvalidStatusForCheckOut = "Booking status is not valid for check-out";
     }
 
     public static class Vehicle
@@ -53,6 +57,7 @@ public static class Messages
         public const string PaymentFailed = "Payment failed";
         public const string InvalidSignature = "Invalid payment signature";
         public const string TransactionNotFound = "Transaction not found";
+        public const string PaymentStatusRetrieved = "Payment status retrieved successfully";
     }
 
     public static class Validation

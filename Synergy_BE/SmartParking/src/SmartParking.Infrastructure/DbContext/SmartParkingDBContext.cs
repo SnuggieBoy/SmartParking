@@ -62,6 +62,8 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
             entity.Property(e => e.BookingTime).HasDefaultValueSql("(getdate())");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
             entity.Property(e => e.TotalAmount).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.CheckInTime);
+            entity.Property(e => e.CheckOutTime);
             entity.Property(e => e.RowVersion)
                 .IsRequired()
                 .IsRowVersion()

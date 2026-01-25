@@ -20,6 +20,14 @@ public sealed class PaymentRepository : IPaymentRepository
             .FirstOrDefaultAsync(p => p.VnpTxnRef == txnRef, ct);
     }
 
+    public async Task<PaymentTransaction?> GetLatestByBookingIdAsync(Guid bookingId, CancellationToken ct = default)
+    {
+        return await _context.PaymentTransactions
+            .Where(p => p.BookingId == bookingId)
+            .OrderByDescending(p => p.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+    }
+
     public async Task<PaymentTransaction> CreateAsync(PaymentTransaction payment, CancellationToken ct = default)
     {
         _context.PaymentTransactions.Add(payment);

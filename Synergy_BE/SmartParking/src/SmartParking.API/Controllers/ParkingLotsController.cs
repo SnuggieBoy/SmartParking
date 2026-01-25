@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartParking.Application.Common.Models;
+using SmartParking.Application.DTOs.Booking;
 using SmartParking.Application.DTOs.ParkingLot;
 using SmartParking.Application.Interfaces.Services;
 using SmartParking.Domain.Constants;
@@ -14,10 +15,12 @@ namespace SmartParking.API.Controllers;
 public sealed class ParkingLotsController : ControllerBase
 {
     private readonly IParkingLotService _parkingLotService;
+    private readonly IBookingService _bookingService;
 
-    public ParkingLotsController(IParkingLotService parkingLotService)
+    public ParkingLotsController(IParkingLotService parkingLotService, IBookingService bookingService)
     {
         _parkingLotService = parkingLotService;
+        _bookingService = bookingService;
     }
 
     [HttpGet]
@@ -89,6 +92,23 @@ public sealed class ParkingLotsController : ControllerBase
         var userId = GetUserIdFromToken();
         await _parkingLotService.DeleteAsync(id, userId, ct);
         return Ok(ApiResponse.SuccessResponse(Messages.ParkingLot.DeleteSuccess));
+    }
+
+    [Authorize(Roles = $"{AuthConstants.Roles.Owner},{AuthConstants.Roles.Admin}")]
+    [HttpGet("{id:guid}/bookings")]
+    [ProducesResponseType(typeof(ApiResponse<PagedResult<ParkingLotBookingDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<PagedResult<ParkingLotBookingDto>>>> GetBookings(
+        Guid id,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken ct = default)
+    {
+        var userId = GetUserIdFromToken();
+        var isAdmin = User.IsInRole(AuthConstants.Roles.Admin);
+        var result = await _bookingService.GetBookingsByParkingLotAsync(id, userId, isAdmin, page, pageSize, ct);
+        return Ok(ApiResponse<PagedResult<ParkingLotBookingDto>>.SuccessResponse(result, Messages.Common.Success));
     }
 
     private Guid GetUserIdFromToken()

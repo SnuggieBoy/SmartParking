@@ -46,6 +46,29 @@ public sealed class BookingRepository : IBookingRepository
             .ToListAsync(ct);
     }
 
+    public async Task<(IReadOnlyList<Booking> Items, int TotalCount)> GetByParkingLotIdPagedAsync(
+        Guid parkingLotId,
+        int skip,
+        int take,
+        CancellationToken ct = default)
+    {
+        var query = _context.Bookings
+            .Include(b => b.User)
+            .Include(b => b.Vehicle)
+            .Where(b => b.ParkingLotId == parkingLotId)
+            .AsNoTracking();
+
+        var total = await query.CountAsync(ct);
+
+        var items = await query
+            .OrderByDescending(b => b.CreatedAt)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(ct);
+
+        return (items, total);
+    }
+
     public async Task<Booking> CreateAsync(Booking booking, CancellationToken ct = default)
     {
         _context.Bookings.Add(booking);

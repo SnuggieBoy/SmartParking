@@ -38,7 +38,7 @@ public sealed class VnPayService : IVnPayService
         var booking = await _bookingRepository.GetByIdAsync(request.BookingId, ct);
         if (booking == null)
         {
-            throw new NotFoundException("Booking not found");
+            throw new NotFoundException(Messages.Booking.NotFound);
         }
 
         if (booking.UserId != userId)

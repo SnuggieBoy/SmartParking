@@ -1,4 +1,5 @@
 using SmartParking.Application.Common.Exceptions;
+using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.Booking;
 using SmartParking.Application.Interfaces.Repositories;
 using SmartParking.Application.Interfaces.Services;
@@ -180,6 +181,143 @@ public sealed class BookingService : IBookingService
 
         // Update occupancy
         await _parkingLotRepository.UpdateOccupancyAsync(booking.ParkingLotId, -1, ct);
+    }
+
+    public async Task<BookingCheckInResponseDto> BookingCheckInAsync(
+        Guid bookingId,
+        Guid userId,
+        bool isAdmin,
+        CancellationToken ct = default)
+    {
+        var booking = await _bookingRepository.GetByIdAsync(bookingId, ct);
+        if (booking == null)
+        {
+            throw new NotFoundException(Messages.Booking.NotFound);
+        }
+
+        if (!isAdmin && booking.UserId != userId)
+        {
+            throw new ForbiddenException();
+        }
+
+        if (!string.Equals(booking.Status, nameof(BookingStatus.Confirmed), StringComparison.Ordinal))
+        {
+            throw new BadRequestException(Messages.Booking.InvalidStatusForCheckIn);
+        }
+
+        var now = DateTime.UtcNow;
+
+        booking.CheckInTime = now;
+        booking.Status = nameof(BookingStatus.InProgress);
+        booking.UpdatedAt = now;
+
+        await _bookingRepository.UpdateAsync(booking, ct);
+
+        return new BookingCheckInResponseDto(
+            booking.BookingId,
+            booking.Status ?? nameof(BookingStatus.InProgress),
+            now
+        );
+    }
+
+    public async Task<BookingCheckOutResponseDto> BookingCheckOutAsync(
+        Guid bookingId,
+        Guid userId,
+        bool isAdmin,
+        CancellationToken ct = default)
+    {
+        var booking = await _bookingRepository.GetByIdAsync(bookingId, ct);
+        if (booking == null)
+        {
+            throw new NotFoundException(Messages.Booking.NotFound);
+        }
+
+        if (!isAdmin && booking.UserId != userId)
+        {
+            throw new ForbiddenException();
+        }
+
+        if (!string.Equals(booking.Status, nameof(BookingStatus.InProgress), StringComparison.Ordinal))
+        {
+            throw new BadRequestException(Messages.Booking.InvalidStatusForCheckOut);
+        }
+
+        var parkingLot = await _parkingLotRepository.GetByIdAsync(booking.ParkingLotId, ct);
+        if (parkingLot == null)
+        {
+            throw new NotFoundException(Messages.ParkingLot.NotFound);
+        }
+
+        var now = DateTime.UtcNow;
+        var actualEnd = now;
+        var actualStart = booking.StartTime;
+        if (actualEnd < actualStart)
+        {
+            actualEnd = actualStart;
+        }
+
+        var duration = actualEnd - actualStart;
+        var totalAmount = CalculateAmount(duration, parkingLot.PricePerHour ?? 0);
+
+        booking.TotalAmount = totalAmount;
+        booking.CheckOutTime = now;
+        booking.Status = nameof(BookingStatus.Completed);
+        booking.UpdatedAt = now;
+
+        await _bookingRepository.UpdateAsync(booking, ct);
+
+        // Update occupancy (free one slot)
+        await _parkingLotRepository.UpdateOccupancyAsync(booking.ParkingLotId, -1, ct);
+
+        return new BookingCheckOutResponseDto(
+            booking.BookingId,
+            booking.Status ?? nameof(BookingStatus.Completed),
+            now,
+            totalAmount
+        );
+    }
+
+    public async Task<PagedResult<ParkingLotBookingDto>> GetBookingsByParkingLotAsync(
+        Guid parkingLotId,
+        Guid userId,
+        bool isAdmin,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        if (page <= 0) page = 1;
+        if (pageSize <= 0) pageSize = 10;
+        if (pageSize > 100) pageSize = 100;
+
+        var parkingLot = await _parkingLotRepository.GetByIdAsync(parkingLotId, ct);
+        if (parkingLot == null)
+        {
+            throw new NotFoundException(Messages.ParkingLot.NotFound);
+        }
+
+        if (!isAdmin && parkingLot.OwnerId != userId)
+        {
+            throw new ForbiddenException();
+        }
+
+        var skip = (page - 1) * pageSize;
+        var (items, total) = await _bookingRepository.GetByParkingLotIdPagedAsync(parkingLotId, skip, pageSize, ct);
+
+        var dtos = items
+            .Select(b => new ParkingLotBookingDto(
+                b.BookingId,
+                b.User?.FullName ?? string.Empty,
+                b.Vehicle?.LicensePlate,
+                b.Status ?? nameof(BookingStatus.Pending),
+                b.StartTime,
+                b.EndTime,
+                b.CheckInTime,
+                b.CheckOutTime,
+                b.TotalAmount ?? 0
+            ))
+            .ToList();
+
+        return new PagedResult<ParkingLotBookingDto>(dtos, page, pageSize, total);
     }
 
     private static decimal CalculateAmount(TimeSpan duration, decimal pricePerHour)
