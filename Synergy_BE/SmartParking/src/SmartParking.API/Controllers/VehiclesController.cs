@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SmartParking.API.Authorization.Policies;
 using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.Vehicle;
 using SmartParking.Application.Interfaces.Services;
@@ -9,7 +10,11 @@ using System.Security.Claims;
 
 namespace SmartParking.API.Controllers;
 
-[Authorize]
+/// <summary>
+/// Vehicle management endpoints for authenticated users.
+/// Security: Only User (Driver) role can manage vehicles. Admin has full access.
+/// </summary>
+[Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
 [ApiController]
 [Route("api/vehicles")]
 public sealed class VehiclesController : ControllerBase
@@ -38,7 +43,8 @@ public sealed class VehiclesController : ControllerBase
     public async Task<ActionResult<ApiResponse<VehicleDto>>> GetById(Guid id, CancellationToken ct = default)
     {
         var userId = GetUserIdFromToken();
-        var vehicle = await _vehicleService.GetByIdAsync(id, userId, ct);
+        var isAdmin = IsAdmin();
+        var vehicle = await _vehicleService.GetByIdAsync(id, userId, isAdmin, ct);
         return Ok(ApiResponse<VehicleDto>.SuccessResponse(vehicle, "Vehicle retrieved successfully"));
     }
 
@@ -68,7 +74,8 @@ public sealed class VehiclesController : ControllerBase
         CancellationToken ct = default)
     {
         var userId = GetUserIdFromToken();
-        var vehicle = await _vehicleService.UpdateAsync(id, request, userId, ct);
+        var isAdmin = IsAdmin();
+        var vehicle = await _vehicleService.UpdateAsync(id, request, userId, isAdmin, ct);
         return Ok(ApiResponse<VehicleDto>.SuccessResponse(vehicle, Messages.Vehicle.UpdateSuccess));
     }
 
@@ -78,13 +85,27 @@ public sealed class VehiclesController : ControllerBase
     public async Task<ActionResult<ApiResponse>> Delete(Guid id, CancellationToken ct = default)
     {
         var userId = GetUserIdFromToken();
-        await _vehicleService.DeleteAsync(id, userId, ct);
+        var isAdmin = IsAdmin();
+        await _vehicleService.DeleteAsync(id, userId, isAdmin, ct);
         return Ok(ApiResponse.SuccessResponse(Messages.Vehicle.DeleteSuccess));
     }
 
+    /// <summary>
+    /// SECURITY: Extracts UserId from JWT claims (NOT from request body).
+    /// Never trust userId from client input - always extract from validated JWT.
+    /// </summary>
     private Guid GetUserIdFromToken()
     {
         var userIdClaim = User.FindFirstValue(JwtRegisteredClaimNames.Sub);
         return Guid.Parse(userIdClaim!);
+    }
+
+    /// <summary>
+    /// SECURITY: Checks if current user has Admin role.
+    /// Admin role bypasses ownership checks in service layer.
+    /// </summary>
+    private bool IsAdmin()
+    {
+        return User.IsInRole(AuthConstants.Roles.Admin);
     }
 }

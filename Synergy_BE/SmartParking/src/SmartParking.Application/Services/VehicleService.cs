@@ -1,4 +1,5 @@
 using SmartParking.Application.Common.Exceptions;
+using SmartParking.Application.Common.Helpers;
 using SmartParking.Application.DTOs.Vehicle;
 using SmartParking.Application.Interfaces.Repositories;
 using SmartParking.Application.Interfaces.Services;
@@ -17,7 +18,7 @@ public sealed class VehicleService : IVehicleService
         _vehicleRepository = vehicleRepository;
     }
 
-    public async Task<VehicleDto> GetByIdAsync(Guid vehicleId, Guid userId, CancellationToken ct = default)
+    public async Task<VehicleDto> GetByIdAsync(Guid vehicleId, Guid userId, bool isAdmin, CancellationToken ct = default)
     {
         var vehicle = await _vehicleRepository.GetByIdAsync(vehicleId, ct);
         if (vehicle == null)
@@ -25,10 +26,8 @@ public sealed class VehicleService : IVehicleService
             throw new NotFoundException(Messages.Vehicle.NotFound);
         }
 
-        if (vehicle.UserId != userId)
-        {
-            throw new UnauthorizedException(Messages.Common.Forbidden);
-        }
+        // SECURITY: Validate ownership or Admin access
+        SecurityHelper.ValidateOwnership(vehicle.UserId, userId, isAdmin);
 
         return MapToDto(vehicle);
     }
@@ -64,7 +63,7 @@ public sealed class VehicleService : IVehicleService
         return MapToDto(created);
     }
 
-    public async Task<VehicleDto> UpdateAsync(Guid vehicleId, UpdateVehicleDto request, Guid userId, CancellationToken ct = default)
+    public async Task<VehicleDto> UpdateAsync(Guid vehicleId, UpdateVehicleDto request, Guid userId, bool isAdmin, CancellationToken ct = default)
     {
         var vehicle = await _vehicleRepository.GetByIdAsync(vehicleId, ct);
         if (vehicle == null)
@@ -72,10 +71,8 @@ public sealed class VehicleService : IVehicleService
             throw new NotFoundException(Messages.Vehicle.NotFound);
         }
 
-        if (vehicle.UserId != userId)
-        {
-            throw new UnauthorizedException(Messages.Common.Forbidden);
-        }
+        // SECURITY: Validate ownership or Admin access
+        SecurityHelper.ValidateOwnership(vehicle.UserId, userId, isAdmin);
 
         if (vehicle.LicensePlate != request.LicensePlate)
         {
@@ -98,7 +95,7 @@ public sealed class VehicleService : IVehicleService
         return MapToDto(vehicle);
     }
 
-    public async Task DeleteAsync(Guid vehicleId, Guid userId, CancellationToken ct = default)
+    public async Task DeleteAsync(Guid vehicleId, Guid userId, bool isAdmin, CancellationToken ct = default)
     {
         var vehicle = await _vehicleRepository.GetByIdAsync(vehicleId, ct);
         if (vehicle == null)
@@ -106,10 +103,8 @@ public sealed class VehicleService : IVehicleService
             throw new NotFoundException(Messages.Vehicle.NotFound);
         }
 
-        if (vehicle.UserId != userId)
-        {
-            throw new UnauthorizedException(Messages.Common.Forbidden);
-        }
+        // SECURITY: Validate ownership or Admin access
+        SecurityHelper.ValidateOwnership(vehicle.UserId, userId, isAdmin);
 
         await _vehicleRepository.DeleteAsync(vehicleId, ct);
     }

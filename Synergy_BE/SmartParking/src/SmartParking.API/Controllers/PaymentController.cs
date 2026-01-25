@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SmartParking.API.Authorization.Policies;
 using SmartParking.API.Models.Payment;
 using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.Payment;
@@ -10,6 +11,10 @@ using System.Security.Claims;
 
 namespace SmartParking.API.Controllers;
 
+/// <summary>
+/// Payment processing endpoints.
+/// Security: Users process own payments. VNPay callback is public but hash-validated.
+/// </summary>
 [ApiController]
 [Route("api/payments")]
 public sealed class PaymentController : ControllerBase
@@ -23,7 +28,11 @@ public sealed class PaymentController : ControllerBase
         _paymentService = paymentService;
     }
 
-    [Authorize]
+    /// <summary>
+    /// SECURITY: Only authenticated users can create payments for their own bookings.
+    /// Ownership validated in service layer.
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
     [HttpPost("create")]
     [ProducesResponseType(typeof(ApiResponse<PaymentResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<PaymentResponseDto>), StatusCodes.Status400BadRequest)]
@@ -48,6 +57,15 @@ public sealed class PaymentController : ControllerBase
         return Ok(ApiResponse<PaymentResponseDto>.SuccessResponse(response, Messages.Payment.CreateSuccess));
     }
 
+    /// <summary>
+    /// VNPAY CALLBACK: Public endpoint called by VNPay after payment.
+    /// SECURITY CRITICAL:
+    /// - [AllowAnonymous] required (VNPay cannot send JWT)
+    /// - SecureHash MUST be validated to prevent tampering
+    /// - Idempotency check prevents duplicate processing
+    /// - Never trust callback data without hash validation
+    /// </summary>
+    [AllowAnonymous]
     [HttpGet("vnpay-callback")]
     [ProducesResponseType(StatusCodes.Status302Found)]
     public async Task<IActionResult> VnPayCallback([FromQuery] VnPayCallbackDto callback, CancellationToken ct)
@@ -62,7 +80,11 @@ public sealed class PaymentController : ControllerBase
         return Redirect($"/payment-failed?txnRef={callback.vnp_TxnRef}");
     }
 
-    [Authorize]
+    /// <summary>
+    /// SECURITY: Only booking owner OR Admin can query payment status.
+    /// Ownership validated in service layer.
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
     [HttpGet("booking/{bookingId:guid}")]
     [ProducesResponseType(typeof(ApiResponse<PaymentStatusDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<PaymentStatusDto>), StatusCodes.Status403Forbidden)]

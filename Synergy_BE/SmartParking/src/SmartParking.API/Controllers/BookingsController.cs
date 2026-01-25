@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SmartParking.API.Authorization.Policies;
 using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.Booking;
 using SmartParking.Application.Interfaces.Services;
@@ -9,7 +10,11 @@ using System.Security.Claims;
 
 namespace SmartParking.API.Controllers;
 
-[Authorize]
+/// <summary>
+/// Booking management endpoints.
+/// Security: Users manage own bookings. Admin has full access.
+/// </summary>
+[Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
 [ApiController]
 [Route("api/bookings")]
 public sealed class BookingsController : ControllerBase
@@ -36,7 +41,8 @@ public sealed class BookingsController : ControllerBase
     public async Task<ActionResult<ApiResponse<BookingDto>>> GetById(Guid id, CancellationToken ct = default)
     {
         var userId = GetUserIdFromToken();
-        var booking = await _bookingService.GetByIdAsync(id, userId, ct);
+        var isAdmin = IsAdmin();
+        var booking = await _bookingService.GetByIdAsync(id, userId, isAdmin, ct);
         return Ok(ApiResponse<BookingDto>.SuccessResponse(booking, "Booking retrieved successfully"));
     }
 
@@ -66,7 +72,8 @@ public sealed class BookingsController : ControllerBase
         CancellationToken ct = default)
     {
         var userId = GetUserIdFromToken();
-        var booking = await _bookingService.UpdateAsync(id, request, userId, ct);
+        var isAdmin = IsAdmin();
+        var booking = await _bookingService.UpdateAsync(id, request, userId, isAdmin, ct);
         return Ok(ApiResponse<BookingDto>.SuccessResponse(booking, Messages.Booking.UpdateSuccess));
     }
 
@@ -77,11 +84,16 @@ public sealed class BookingsController : ControllerBase
     public async Task<ActionResult<ApiResponse>> Cancel(Guid id, CancellationToken ct = default)
     {
         var userId = GetUserIdFromToken();
-        await _bookingService.CancelAsync(id, userId, ct);
+        var isAdmin = IsAdmin();
+        await _bookingService.CancelAsync(id, userId, isAdmin, ct);
         return Ok(ApiResponse.SuccessResponse(Messages.Booking.CancelSuccess));
     }
 
-    [Authorize(Roles = $"{AuthConstants.Roles.User},{AuthConstants.Roles.Admin}")]
+    /// <summary>
+    /// SECURITY: Only booking owner OR Admin can check-in.
+    /// Booking must be in Confirmed status to proceed.
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
     [HttpPost("{id:guid}/check-in")]
     [ProducesResponseType(typeof(ApiResponse<BookingCheckInResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<BookingCheckInResponseDto>), StatusCodes.Status400BadRequest)]
@@ -95,7 +107,11 @@ public sealed class BookingsController : ControllerBase
         return Ok(ApiResponse<BookingCheckInResponseDto>.SuccessResponse(result, Messages.Booking.CheckInSuccess));
     }
 
-    [Authorize(Roles = $"{AuthConstants.Roles.User},{AuthConstants.Roles.Admin}")]
+    /// <summary>
+    /// SECURITY: Only booking owner OR Admin can check-out.
+    /// Booking must be in InProgress status to proceed.
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
     [HttpPost("{id:guid}/check-out")]
     [ProducesResponseType(typeof(ApiResponse<BookingCheckOutResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<BookingCheckOutResponseDto>), StatusCodes.Status400BadRequest)]
@@ -109,9 +125,22 @@ public sealed class BookingsController : ControllerBase
         return Ok(ApiResponse<BookingCheckOutResponseDto>.SuccessResponse(result, Messages.Booking.CheckOutSuccess));
     }
 
+    /// <summary>
+    /// SECURITY: Extracts UserId from JWT claims (NOT from request body).
+    /// Never trust userId from client input - always extract from validated JWT.
+    /// </summary>
     private Guid GetUserIdFromToken()
     {
         var userIdClaim = User.FindFirstValue(JwtRegisteredClaimNames.Sub);
         return Guid.Parse(userIdClaim!);
+    }
+
+    /// <summary>
+    /// SECURITY: Checks if current user has Admin role.
+    /// Admin role bypasses ownership checks in service layer.
+    /// </summary>
+    private bool IsAdmin()
+    {
+        return User.IsInRole(AuthConstants.Roles.Admin);
     }
 }

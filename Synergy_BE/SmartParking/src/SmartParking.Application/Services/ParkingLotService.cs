@@ -1,4 +1,5 @@
 using SmartParking.Application.Common.Exceptions;
+using SmartParking.Application.Common.Helpers;
 using SmartParking.Application.DTOs.ParkingLot;
 using SmartParking.Application.Interfaces.Repositories;
 using SmartParking.Application.Interfaces.Services;
@@ -72,6 +73,7 @@ public sealed class ParkingLotService : IParkingLotService
         Guid parkingLotId, 
         UpdateParkingLotDto request, 
         Guid ownerId, 
+        bool isAdmin,
         CancellationToken ct = default)
     {
         var parkingLot = await _parkingLotRepository.GetByIdAsync(parkingLotId, ct);
@@ -80,10 +82,8 @@ public sealed class ParkingLotService : IParkingLotService
             throw new NotFoundException(Messages.ParkingLot.NotFound);
         }
 
-        if (parkingLot.OwnerId != ownerId)
-        {
-            throw new UnauthorizedException(Messages.Common.Forbidden);
-        }
+        // SECURITY: Validate ownership or Admin access
+        SecurityHelper.ValidateOwnership(parkingLot.OwnerId, ownerId, isAdmin);
 
         parkingLot.Name = request.Name;
         parkingLot.Address = request.Address;
@@ -95,7 +95,7 @@ public sealed class ParkingLotService : IParkingLotService
         return MapToDto(parkingLot);
     }
 
-    public async Task DeleteAsync(Guid parkingLotId, Guid ownerId, CancellationToken ct = default)
+    public async Task DeleteAsync(Guid parkingLotId, Guid ownerId, bool isAdmin, CancellationToken ct = default)
     {
         var parkingLot = await _parkingLotRepository.GetByIdAsync(parkingLotId, ct);
         if (parkingLot == null)
@@ -103,10 +103,8 @@ public sealed class ParkingLotService : IParkingLotService
             throw new NotFoundException(Messages.ParkingLot.NotFound);
         }
 
-        if (parkingLot.OwnerId != ownerId)
-        {
-            throw new UnauthorizedException(Messages.Common.Forbidden);
-        }
+        // SECURITY: Validate ownership or Admin access
+        SecurityHelper.ValidateOwnership(parkingLot.OwnerId, ownerId, isAdmin);
 
         await _parkingLotRepository.DeleteAsync(parkingLotId, ct);
     }

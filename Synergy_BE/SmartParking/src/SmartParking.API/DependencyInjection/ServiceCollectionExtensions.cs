@@ -1,10 +1,13 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using SmartParking.API.Authorization.Policies;
 using SmartParking.API.Filters;
 using SmartParking.API.Middlewares;
 using SmartParking.Application.DependencyInjection;
+using SmartParking.Domain.Constants;
 using SmartParking.Infrastructure.DependencyInjection;
 using System.Text;
 
@@ -99,7 +102,29 @@ public static class ServiceCollectionExtensions
             };
         });
 
-        services.AddAuthorization();
+        // Policy-Based Authorization
+        services.AddAuthorization(options =>
+        {
+            // User (Driver) only policy
+            options.AddPolicy(AuthorizationPolicies.UserOnly, policy =>
+                policy.RequireRole(AuthConstants.Roles.User));
+
+            // Owner only policy
+            options.AddPolicy(AuthorizationPolicies.OwnerOnly, policy =>
+                policy.RequireRole(AuthConstants.Roles.Owner));
+
+            // Admin only policy
+            options.AddPolicy(AuthorizationPolicies.AdminOnly, policy =>
+                policy.RequireRole(AuthConstants.Roles.Admin));
+
+            // Owner OR Admin policy
+            options.AddPolicy(AuthorizationPolicies.OwnerOrAdmin, policy =>
+                policy.RequireRole(AuthConstants.Roles.Owner, AuthConstants.Roles.Admin));
+
+            // User OR Admin policy
+            options.AddPolicy(AuthorizationPolicies.UserOrAdmin, policy =>
+                policy.RequireRole(AuthConstants.Roles.User, AuthConstants.Roles.Admin));
+        });
 
         // CORS
         services.AddCors(options =>

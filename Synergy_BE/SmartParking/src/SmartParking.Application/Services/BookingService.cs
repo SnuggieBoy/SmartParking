@@ -1,4 +1,5 @@
 using SmartParking.Application.Common.Exceptions;
+using SmartParking.Application.Common.Helpers;
 using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.Booking;
 using SmartParking.Application.Interfaces.Repositories;
@@ -25,7 +26,7 @@ public sealed class BookingService : IBookingService
         _vehicleRepository = vehicleRepository;
     }
 
-    public async Task<BookingDto> GetByIdAsync(Guid bookingId, Guid userId, CancellationToken ct = default)
+    public async Task<BookingDto> GetByIdAsync(Guid bookingId, Guid userId, bool isAdmin, CancellationToken ct = default)
     {
         var booking = await _bookingRepository.GetByIdAsync(bookingId, ct);
         if (booking == null)
@@ -33,10 +34,8 @@ public sealed class BookingService : IBookingService
             throw new NotFoundException(Messages.Booking.NotFound);
         }
 
-        if (booking.UserId != userId)
-        {
-            throw new UnauthorizedException(Messages.Common.Forbidden);
-        }
+        // SECURITY: Validate ownership or Admin access
+        SecurityHelper.ValidateOwnership(booking.UserId, userId, isAdmin);
 
         return MapToDto(booking);
     }
@@ -110,7 +109,7 @@ public sealed class BookingService : IBookingService
         return MapToDto(created!);
     }
 
-    public async Task<BookingDto> UpdateAsync(Guid bookingId, UpdateBookingDto request, Guid userId, CancellationToken ct = default)
+    public async Task<BookingDto> UpdateAsync(Guid bookingId, UpdateBookingDto request, Guid userId, bool isAdmin, CancellationToken ct = default)
     {
         var booking = await _bookingRepository.GetByIdAsync(bookingId, ct);
         if (booking == null)
@@ -118,10 +117,8 @@ public sealed class BookingService : IBookingService
             throw new NotFoundException(Messages.Booking.NotFound);
         }
 
-        if (booking.UserId != userId)
-        {
-            throw new UnauthorizedException(Messages.Common.Forbidden);
-        }
+        // SECURITY: Validate ownership or Admin access
+        SecurityHelper.ValidateOwnership(booking.UserId, userId, isAdmin);
 
         if (booking.Status == nameof(BookingStatus.Cancelled) || booking.Status == nameof(BookingStatus.Completed))
         {
@@ -151,7 +148,7 @@ public sealed class BookingService : IBookingService
         return MapToDto(booking!);
     }
 
-    public async Task CancelAsync(Guid bookingId, Guid userId, CancellationToken ct = default)
+    public async Task CancelAsync(Guid bookingId, Guid userId, bool isAdmin, CancellationToken ct = default)
     {
         var booking = await _bookingRepository.GetByIdAsync(bookingId, ct);
         if (booking == null)
@@ -159,10 +156,8 @@ public sealed class BookingService : IBookingService
             throw new NotFoundException(Messages.Booking.NotFound);
         }
 
-        if (booking.UserId != userId)
-        {
-            throw new UnauthorizedException(Messages.Common.Forbidden);
-        }
+        // SECURITY: Validate ownership or Admin access
+        SecurityHelper.ValidateOwnership(booking.UserId, userId, isAdmin);
 
         if (booking.Status == nameof(BookingStatus.Cancelled))
         {

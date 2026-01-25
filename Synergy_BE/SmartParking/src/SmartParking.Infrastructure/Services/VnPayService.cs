@@ -41,9 +41,10 @@ public sealed class VnPayService : IVnPayService
             throw new NotFoundException(Messages.Booking.NotFound);
         }
 
+        // SECURITY: Validate booking ownership (Admin check would be done at controller level)
         if (booking.UserId != userId)
         {
-            throw new UnauthorizedException(Messages.Common.Forbidden);
+            throw new ForbiddenException(Messages.Common.Forbidden);
         }
 
         var txnRef = $"PAY{DateTime.UtcNow:yyyyMMddHHmmss}{Random.Shared.Next(1000, 9999)}";
@@ -88,14 +89,41 @@ public sealed class VnPayService : IVnPayService
         return new PaymentResponseDto(paymentUrl, txnRef);
     }
 
+    /// <summary>
+    /// SECURITY CRITICAL: Processes VNPay payment callback.
+    /// Implements:
+    /// 1. Idempotency check (prevents duplicate processing)
+    /// 2. SecureHash validation (prevents tampering)
+    /// 3. Transaction logging (audit trail)
+    /// </summary>
     public async Task<bool> ProcessCallbackAsync(VnPayCallbackDto callback, CancellationToken ct = default)
     {
+        // Step 1: Find payment transaction
         var payment = await _paymentRepository.GetByTxnRefAsync(callback.vnp_TxnRef, ct);
         if (payment == null)
         {
             return false;
         }
 
+        // SECURITY: Idempotency check - prevent duplicate processing
+        // If payment already processed (status is not Pending), reject callback
+        if (payment.PaymentStatus != nameof(PaymentStatus.Pending))
+        {
+            // Log the duplicate callback attempt for security monitoring
+            var duplicateLog = new PaymentLog
+            {
+                LogId = Guid.NewGuid(),
+                PaymentId = payment.PaymentId,
+                RawData = $"DUPLICATE_CALLBACK_REJECTED: {JsonSerializer.Serialize(callback)}",
+                CreatedAt = DateTime.UtcNow
+            };
+            await _paymentRepository.CreateLogAsync(duplicateLog, ct);
+            
+            // Return success if original was successful (idempotent response)
+            return payment.PaymentStatus == nameof(PaymentStatus.Success);
+        }
+
+        // Step 2: Build params for hash validation (exclude vnp_SecureHash)
         var vnpParams = new Dictionary<string, string>
         {
             { "vnp_TmnCode", callback.vnp_TmnCode },
@@ -112,15 +140,26 @@ public sealed class VnPayService : IVnPayService
             { "vnp_SecureHashType", callback.vnp_SecureHashType }
         };
 
+        // Step 3: SECURITY - Validate SecureHash to prevent tampering
         var sortedParams = vnpParams.OrderBy(x => x.Key).ToList();
         var signData = string.Join("&", sortedParams.Select(x => $"{x.Key}={x.Value}"));
         var secureHash = HmacSHA512(_settings.HashSecret, signData);
 
         if (!secureHash.Equals(callback.vnp_SecureHash, StringComparison.OrdinalIgnoreCase))
         {
+            // Log hash validation failure for security monitoring
+            var invalidHashLog = new PaymentLog
+            {
+                LogId = Guid.NewGuid(),
+                PaymentId = payment.PaymentId,
+                RawData = $"INVALID_HASH_REJECTED: {JsonSerializer.Serialize(callback)}",
+                CreatedAt = DateTime.UtcNow
+            };
+            await _paymentRepository.CreateLogAsync(invalidHashLog, ct);
             return false;
         }
 
+        // Step 4: Update payment status
         payment.VnpTransactionNo = callback.vnp_TransactionNo;
         payment.VnpResponseCode = callback.vnp_ResponseCode;
         payment.PaymentStatus = callback.vnp_ResponseCode == PaymentConstants.VnPayResponseCodes.Success 
@@ -129,6 +168,7 @@ public sealed class VnPayService : IVnPayService
 
         await _paymentRepository.UpdateAsync(payment, ct);
 
+        // Step 5: Log callback for audit trail
         var log = new PaymentLog
         {
             LogId = Guid.NewGuid(),
@@ -139,17 +179,18 @@ public sealed class VnPayService : IVnPayService
 
         await _paymentRepository.CreateLogAsync(log, ct);
 
+        // Step 6: Update booking status if payment successful
         if (callback.vnp_ResponseCode == PaymentConstants.VnPayResponseCodes.Success)
         {
             var booking = await _bookingRepository.GetByIdAsync(payment.BookingId, ct);
-            if (booking != null)
+            if (booking != null && booking.Status == nameof(BookingStatus.Pending))
             {
                 booking.Status = nameof(BookingStatus.Confirmed);
                 await _bookingRepository.UpdateAsync(booking, ct);
             }
         }
 
-        return true;
+        return callback.vnp_ResponseCode == PaymentConstants.VnPayResponseCodes.Success;
     }
 
     private static string HmacSHA512(string key, string data)

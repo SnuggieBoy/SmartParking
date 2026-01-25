@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SmartParking.API.Authorization.Policies;
 using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.Booking;
 using SmartParking.Application.DTOs.ParkingLot;
@@ -10,6 +11,10 @@ using System.Security.Claims;
 
 namespace SmartParking.API.Controllers;
 
+/// <summary>
+/// Parking lot management endpoints.
+/// Security: Public read access. Owners manage own lots. Admin has full access.
+/// </summary>
 [ApiController]
 [Route("api/parking-lots")]
 public sealed class ParkingLotsController : ControllerBase
@@ -23,6 +28,10 @@ public sealed class ParkingLotsController : ControllerBase
         _bookingService = bookingService;
     }
 
+    /// <summary>
+    /// PUBLIC ENDPOINT: Anyone can view available parking lots.
+    /// </summary>
+    [AllowAnonymous]
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponse<IEnumerable<ParkingLotDto>>), StatusCodes.Status200OK)]
     public async Task<ActionResult<ApiResponse<IEnumerable<ParkingLotDto>>>> GetAll(
@@ -33,6 +42,10 @@ public sealed class ParkingLotsController : ControllerBase
         return Ok(ApiResponse<IEnumerable<ParkingLotDto>>.SuccessResponse(parkingLots, "Parking lots retrieved successfully"));
     }
 
+    /// <summary>
+    /// PUBLIC ENDPOINT: Anyone can view parking lot details.
+    /// </summary>
+    [AllowAnonymous]
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(ApiResponse<ParkingLotDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<ParkingLotDto>), StatusCodes.Status404NotFound)]
@@ -42,7 +55,10 @@ public sealed class ParkingLotsController : ControllerBase
         return Ok(ApiResponse<ParkingLotDto>.SuccessResponse(parkingLot, "Parking lot retrieved successfully"));
     }
 
-    [Authorize(Roles = $"{AuthConstants.Roles.Owner},{AuthConstants.Roles.Admin}")]
+    /// <summary>
+    /// SECURITY: Owner OR Admin can view their parking lots.
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.OwnerOrAdmin)]
     [HttpGet("my-parking-lots")]
     [ProducesResponseType(typeof(ApiResponse<IEnumerable<ParkingLotDto>>), StatusCodes.Status200OK)]
     public async Task<ActionResult<ApiResponse<IEnumerable<ParkingLotDto>>>> GetMyParkingLots(CancellationToken ct = default)
@@ -52,7 +68,10 @@ public sealed class ParkingLotsController : ControllerBase
         return Ok(ApiResponse<IEnumerable<ParkingLotDto>>.SuccessResponse(parkingLots, "My parking lots retrieved successfully"));
     }
 
-    [Authorize(Roles = $"{AuthConstants.Roles.Owner},{AuthConstants.Roles.Admin}")]
+    /// <summary>
+    /// SECURITY: Owner OR Admin can create parking lots.
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.OwnerOrAdmin)]
     [HttpPost]
     [ProducesResponseType(typeof(ApiResponse<ParkingLotDto>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiResponse<ParkingLotDto>), StatusCodes.Status400BadRequest)]
@@ -69,7 +88,11 @@ public sealed class ParkingLotsController : ControllerBase
         );
     }
 
-    [Authorize(Roles = $"{AuthConstants.Roles.Owner},{AuthConstants.Roles.Admin}")]
+    /// <summary>
+    /// SECURITY: Only lot owner OR Admin can update.
+    /// Ownership validated in service layer.
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.OwnerOrAdmin)]
     [HttpPut("{id:guid}")]
     [ProducesResponseType(typeof(ApiResponse<ParkingLotDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<ParkingLotDto>), StatusCodes.Status404NotFound)]
@@ -79,22 +102,32 @@ public sealed class ParkingLotsController : ControllerBase
         CancellationToken ct = default)
     {
         var userId = GetUserIdFromToken();
-        var parkingLot = await _parkingLotService.UpdateAsync(id, request, userId, ct);
+        var isAdmin = IsAdmin();
+        var parkingLot = await _parkingLotService.UpdateAsync(id, request, userId, isAdmin, ct);
         return Ok(ApiResponse<ParkingLotDto>.SuccessResponse(parkingLot, Messages.ParkingLot.UpdateSuccess));
     }
 
-    [Authorize(Roles = $"{AuthConstants.Roles.Owner},{AuthConstants.Roles.Admin}")]
+    /// <summary>
+    /// SECURITY: Only lot owner OR Admin can delete.
+    /// Ownership validated in service layer.
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.OwnerOrAdmin)]
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ApiResponse>> Delete(Guid id, CancellationToken ct = default)
     {
         var userId = GetUserIdFromToken();
-        await _parkingLotService.DeleteAsync(id, userId, ct);
+        var isAdmin = IsAdmin();
+        await _parkingLotService.DeleteAsync(id, userId, isAdmin, ct);
         return Ok(ApiResponse.SuccessResponse(Messages.ParkingLot.DeleteSuccess));
     }
 
-    [Authorize(Roles = $"{AuthConstants.Roles.Owner},{AuthConstants.Roles.Admin}")]
+    /// <summary>
+    /// SECURITY: Only lot owner OR Admin can view bookings of a parking lot.
+    /// Ownership validated in service layer.
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.OwnerOrAdmin)]
     [HttpGet("{id:guid}/bookings")]
     [ProducesResponseType(typeof(ApiResponse<PagedResult<ParkingLotBookingDto>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status403Forbidden)]
@@ -111,9 +144,22 @@ public sealed class ParkingLotsController : ControllerBase
         return Ok(ApiResponse<PagedResult<ParkingLotBookingDto>>.SuccessResponse(result, Messages.Common.Success));
     }
 
+    /// <summary>
+    /// SECURITY: Extracts UserId from JWT claims (NOT from request body).
+    /// Never trust userId from client input - always extract from validated JWT.
+    /// </summary>
     private Guid GetUserIdFromToken()
     {
         var userIdClaim = User.FindFirstValue(JwtRegisteredClaimNames.Sub);
         return Guid.Parse(userIdClaim!);
+    }
+
+    /// <summary>
+    /// SECURITY: Checks if current user has Admin role.
+    /// Admin role bypasses ownership checks in service layer.
+    /// </summary>
+    private bool IsAdmin()
+    {
+        return User.IsInRole(AuthConstants.Roles.Admin);
     }
 }
