@@ -10,9 +10,8 @@ using System.Security.Claims;
 
 namespace SmartParking.API.Controllers;
 
-[ApiController]
 [Route("api/auth")]
-public sealed class AuthenticationController : ControllerBase
+public sealed class AuthenticationController : BaseApiController
 {
     private readonly IAuthenticationService _authService;
 

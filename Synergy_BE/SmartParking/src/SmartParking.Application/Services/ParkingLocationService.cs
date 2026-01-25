@@ -1,5 +1,6 @@
 using SmartParking.Application.Common.Exceptions;
 using SmartParking.Application.Common.Helpers;
+using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.ParkingLocation;
 using SmartParking.Application.Interfaces.Repositories;
 using SmartParking.Application.Interfaces.Services;
@@ -73,16 +74,43 @@ public sealed class ParkingLocationService : IParkingLocationService
         await _repository.AddAsync(entity, ct);
     }
 
-    public async Task<IEnumerable<ParkingLocationResponseDto>> GetAllAsync(CancellationToken ct = default)
+    public async Task<PagedResult<ParkingLocationResponseDto>> GetAllAsync(
+        int page = 1,
+        int pageSize = 10,
+        CancellationToken ct = default)
     {
-        var locations = await _repository.GetAllAsync(ct);
-        return locations.Select(loc => MapToDto(loc));
+        // Validate and enforce pagination limits
+        if (page < PaginationConstants.MinPage)
+            page = PaginationConstants.DefaultPage;
+        
+        if (pageSize < PaginationConstants.MinPageSize)
+            pageSize = PaginationConstants.DefaultPageSize;
+        
+        if (pageSize > PaginationConstants.MaxPageSize)
+            pageSize = PaginationConstants.MaxPageSize;
+
+        var allLocations = await _repository.GetAllAsync(ct);
+        var totalCount = allLocations.Count();
+        
+        var pagedLocations = allLocations
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(loc => MapToDto(loc))
+            .ToList();
+
+        return new PagedResult<ParkingLocationResponseDto>(
+            pagedLocations,
+            page,
+            pageSize,
+            totalCount);
     }
 
-    public async Task<IEnumerable<ParkingLocationResponseDto>> GetNearbyAsync(
+    public async Task<PagedResult<ParkingLocationResponseDto>> GetNearbyAsync(
         double latitude,
         double longitude,
         double radiusInMeters = 3000,
+        int page = 1,
+        int pageSize = 10,
         CancellationToken ct = default)
     {
         // Validate user coordinates
@@ -101,11 +129,26 @@ public sealed class ParkingLocationService : IParkingLocationService
             throw new BadRequestException("Radius must be greater than 0");
         }
 
-        // Get active locations with available slots
-        var locations = await _repository.GetActiveWithSlotsAsync(ct);
+        // Validate and enforce pagination limits
+        if (page < PaginationConstants.MinPage)
+            page = PaginationConstants.DefaultPage;
+        
+        if (pageSize < PaginationConstants.MinPageSize)
+            pageSize = PaginationConstants.DefaultPageSize;
+        
+        if (pageSize > PaginationConstants.MaxPageSize)
+            pageSize = PaginationConstants.MaxPageSize;
 
-        // Calculate distance for each location and filter by radius
-        var nearbyLocations = locations
+        // PERFORMANCE OPTIMIZATION: Calculate bounding box to pre-filter candidates
+        var (minLat, maxLat, minLon, maxLon) = GeoDistanceHelper.GetBoundingBox(
+            latitude, longitude, radiusInMeters);
+
+        // Get active locations within bounding box (reduces candidate set significantly)
+        var locations = await _repository.GetActiveWithinBoundsAsync(
+            minLat, maxLat, minLon, maxLon, ct);
+
+        // Calculate precise distance for remaining candidates and filter by exact radius
+        var nearbyLocationsWithDistance = locations
             .Select(loc => new
             {
                 Location = loc,
@@ -115,10 +158,21 @@ public sealed class ParkingLocationService : IParkingLocationService
             })
             .Where(x => x.Distance <= radiusInMeters)
             .OrderBy(x => x.Distance)
+            .ToList();
+
+        var totalCount = nearbyLocationsWithDistance.Count;
+
+        var pagedLocations = nearbyLocationsWithDistance
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(x => MapToDto(x.Location, x.Distance))
             .ToList();
 
-        return nearbyLocations;
+        return new PagedResult<ParkingLocationResponseDto>(
+            pagedLocations,
+            page,
+            pageSize,
+            totalCount);
     }
 
     /// <summary>

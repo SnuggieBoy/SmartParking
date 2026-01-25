@@ -13,6 +13,9 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        // Register HttpContextAccessor for audit fields
+        services.AddHttpContextAccessor();
+
         // DbContext
         services.AddDbContext<SmartParkingDBContext>(options =>
             options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));

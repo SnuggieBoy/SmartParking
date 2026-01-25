@@ -15,9 +15,8 @@ namespace SmartParking.API.Controllers;
 /// Security: Users manage own bookings. Admin has full access.
 /// </summary>
 [Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
-[ApiController]
 [Route("api/bookings")]
-public sealed class BookingsController : ControllerBase
+public sealed class BookingsController : BaseApiController
 {
     private readonly IBookingService _bookingService;
 
@@ -123,24 +122,5 @@ public sealed class BookingsController : ControllerBase
         var isAdmin = User.IsInRole(AuthConstants.Roles.Admin);
         var result = await _bookingService.BookingCheckOutAsync(id, userId, isAdmin, ct);
         return Ok(ApiResponse<BookingCheckOutResponseDto>.SuccessResponse(result, Messages.Booking.CheckOutSuccess));
-    }
-
-    /// <summary>
-    /// SECURITY: Extracts UserId from JWT claims (NOT from request body).
-    /// Never trust userId from client input - always extract from validated JWT.
-    /// </summary>
-    private Guid GetUserIdFromToken()
-    {
-        var userIdClaim = User.FindFirstValue(JwtRegisteredClaimNames.Sub);
-        return Guid.Parse(userIdClaim!);
-    }
-
-    /// <summary>
-    /// SECURITY: Checks if current user has Admin role.
-    /// Admin role bypasses ownership checks in service layer.
-    /// </summary>
-    private bool IsAdmin()
-    {
-        return User.IsInRole(AuthConstants.Roles.Admin);
     }
 }

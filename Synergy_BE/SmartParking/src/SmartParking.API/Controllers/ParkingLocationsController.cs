@@ -13,9 +13,8 @@ namespace SmartParking.API.Controllers;
 /// Parking location management and map-based search endpoints.
 /// Security: Users can search nearby. Admin manages locations.
 /// </summary>
-[ApiController]
 [Route("api/parking-locations")]
-public sealed class ParkingLocationsController : ControllerBase
+public sealed class ParkingLocationsController : BaseApiController
 {
     private readonly IParkingLocationService _service;
 
@@ -29,14 +28,16 @@ public sealed class ParkingLocationsController : ControllerBase
     /// </summary>
     [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpGet]
-    [ProducesResponseType(typeof(ApiResponse<IEnumerable<ParkingLocationResponseDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<PagedResult<ParkingLocationResponseDto>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<ApiResponse<IEnumerable<ParkingLocationResponseDto>>>> GetAll(
+    public async Task<ActionResult<ApiResponse<PagedResult<ParkingLocationResponseDto>>>> GetAll(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
         CancellationToken ct = default)
     {
-        var locations = await _service.GetAllAsync(ct);
-        return Ok(ApiResponse<IEnumerable<ParkingLocationResponseDto>>.SuccessResponse(
-            locations,
+        var result = await _service.GetAllAsync(page, pageSize, ct);
+        return Ok(ApiResponse<PagedResult<ParkingLocationResponseDto>>.SuccessResponse(
+            result,
             "Parking locations retrieved successfully"));
     }
 
@@ -50,19 +51,21 @@ public sealed class ParkingLocationsController : ControllerBase
     /// <param name="radius">Search radius in meters (default: 3000m = 3km)</param>
     [Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
     [HttpGet("nearby")]
-    [ProducesResponseType(typeof(ApiResponse<IEnumerable<ParkingLocationResponseDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<PagedResult<ParkingLocationResponseDto>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<ApiResponse<IEnumerable<ParkingLocationResponseDto>>>> GetNearby(
+    public async Task<ActionResult<ApiResponse<PagedResult<ParkingLocationResponseDto>>>> GetNearby(
         [FromQuery] double lat,
         [FromQuery] double lng,
         [FromQuery] double radius = 3000,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
         CancellationToken ct = default)
     {
-        var locations = await _service.GetNearbyAsync(lat, lng, radius, ct);
-        return Ok(ApiResponse<IEnumerable<ParkingLocationResponseDto>>.SuccessResponse(
-            locations,
-            $"Found {locations.Count()} parking location(s) within {radius}m"));
+        var result = await _service.GetNearbyAsync(lat, lng, radius, page, pageSize, ct);
+        return Ok(ApiResponse<PagedResult<ParkingLocationResponseDto>>.SuccessResponse(
+            result,
+            $"Found {result.TotalCount} parking location(s) within {radius}m (Page {result.Page}/{result.TotalPages})"));
     }
 
     /// <summary>

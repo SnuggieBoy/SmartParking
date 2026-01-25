@@ -1,10 +1,12 @@
+using SmartParking.Domain.Interfaces;
+
 namespace SmartParking.Domain.Entities;
 
 /// <summary>
 /// Parking location entity for map-based parking lot discovery.
 /// Stores geolocation data and address details for spatial queries.
 /// </summary>
-public partial class ParkingLocation
+public partial class ParkingLocation : IAuditable, ISoftDeletable
 {
     public Guid Id { get; set; }
 
@@ -42,7 +44,19 @@ public partial class ParkingLocation
 
     public bool IsActive { get; set; }
 
+    // IAuditable properties
     public DateTime CreatedAt { get; set; }
 
+    public Guid? CreatedBy { get; set; }
+
     public DateTime? UpdatedAt { get; set; }
+
+    public Guid? UpdatedBy { get; set; }
+
+    // ISoftDeletable properties
+    public bool IsDeleted { get; set; }
+
+    public DateTime? DeletedAt { get; set; }
+
+    public Guid? DeletedBy { get; set; }
 }

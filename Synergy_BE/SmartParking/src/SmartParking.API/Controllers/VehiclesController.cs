@@ -15,9 +15,8 @@ namespace SmartParking.API.Controllers;
 /// Security: Only User (Driver) role can manage vehicles. Admin has full access.
 /// </summary>
 [Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
-[ApiController]
 [Route("api/vehicles")]
-public sealed class VehiclesController : ControllerBase
+public sealed class VehiclesController : BaseApiController
 {
     private readonly IVehicleService _vehicleService;
 
@@ -88,24 +87,5 @@ public sealed class VehiclesController : ControllerBase
         var isAdmin = IsAdmin();
         await _vehicleService.DeleteAsync(id, userId, isAdmin, ct);
         return Ok(ApiResponse.SuccessResponse(Messages.Vehicle.DeleteSuccess));
-    }
-
-    /// <summary>
-    /// SECURITY: Extracts UserId from JWT claims (NOT from request body).
-    /// Never trust userId from client input - always extract from validated JWT.
-    /// </summary>
-    private Guid GetUserIdFromToken()
-    {
-        var userIdClaim = User.FindFirstValue(JwtRegisteredClaimNames.Sub);
-        return Guid.Parse(userIdClaim!);
-    }
-
-    /// <summary>
-    /// SECURITY: Checks if current user has Admin role.
-    /// Admin role bypasses ownership checks in service layer.
-    /// </summary>
-    private bool IsAdmin()
-    {
-        return User.IsInRole(AuthConstants.Roles.Admin);
     }
 }

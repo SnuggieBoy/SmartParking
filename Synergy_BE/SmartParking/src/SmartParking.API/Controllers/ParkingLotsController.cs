@@ -15,9 +15,8 @@ namespace SmartParking.API.Controllers;
 /// Parking lot management endpoints.
 /// Security: Public read access. Owners manage own lots. Admin has full access.
 /// </summary>
-[ApiController]
 [Route("api/parking-lots")]
-public sealed class ParkingLotsController : ControllerBase
+public sealed class ParkingLotsController : BaseApiController
 {
     private readonly IParkingLotService _parkingLotService;
     private readonly IBookingService _bookingService;
@@ -142,24 +141,5 @@ public sealed class ParkingLotsController : ControllerBase
         var isAdmin = User.IsInRole(AuthConstants.Roles.Admin);
         var result = await _bookingService.GetBookingsByParkingLotAsync(id, userId, isAdmin, page, pageSize, ct);
         return Ok(ApiResponse<PagedResult<ParkingLotBookingDto>>.SuccessResponse(result, Messages.Common.Success));
-    }
-
-    /// <summary>
-    /// SECURITY: Extracts UserId from JWT claims (NOT from request body).
-    /// Never trust userId from client input - always extract from validated JWT.
-    /// </summary>
-    private Guid GetUserIdFromToken()
-    {
-        var userIdClaim = User.FindFirstValue(JwtRegisteredClaimNames.Sub);
-        return Guid.Parse(userIdClaim!);
-    }
-
-    /// <summary>
-    /// SECURITY: Checks if current user has Admin role.
-    /// Admin role bypasses ownership checks in service layer.
-    /// </summary>
-    private bool IsAdmin()
-    {
-        return User.IsInRole(AuthConstants.Roles.Admin);
     }
 }

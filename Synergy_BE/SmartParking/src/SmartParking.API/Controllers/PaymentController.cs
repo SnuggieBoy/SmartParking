@@ -15,9 +15,8 @@ namespace SmartParking.API.Controllers;
 /// Payment processing endpoints.
 /// Security: Users process own payments. VNPay callback is public but hash-validated.
 /// </summary>
-[ApiController]
 [Route("api/payments")]
-public sealed class PaymentController : ControllerBase
+public sealed class PaymentController : BaseApiController
 {
     private readonly IVnPayService _vnPayService;
     private readonly IPaymentService _paymentService;
@@ -41,11 +40,7 @@ public sealed class PaymentController : ControllerBase
         [FromBody] CreatePaymentRequest request,
         CancellationToken ct)
     {
-        var userIdClaim = User.FindFirstValue(JwtRegisteredClaimNames.Sub);
-        if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
-        {
-            return Unauthorized(ApiResponse<PaymentResponseDto>.FailureResponse(Messages.Common.Unauthorized));
-        }
+        var userId = GetUserIdFromToken();
 
         var dto = new CreatePaymentRequestDto(
             request.BookingId,

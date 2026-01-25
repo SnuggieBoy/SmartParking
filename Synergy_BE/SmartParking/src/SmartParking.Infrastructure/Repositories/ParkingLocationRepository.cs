@@ -46,4 +46,18 @@ public sealed class ParkingLocationRepository : IParkingLocationRepository
             .AsNoTracking()
             .ToListAsync(ct);
     }
+
+    public async Task<IEnumerable<ParkingLocation>> GetActiveWithinBoundsAsync(
+        double minLat, double maxLat,
+        double minLon, double maxLon,
+        CancellationToken ct = default)
+    {
+        return await _context.ParkingLocations
+            .AsNoTracking()
+            .Where(p => p.IsActive 
+                && p.AvailableSlots > 0
+                && p.Latitude >= minLat && p.Latitude <= maxLat
+                && p.Longitude >= minLon && p.Longitude <= maxLon)
+            .ToListAsync(ct);
+    }
 }

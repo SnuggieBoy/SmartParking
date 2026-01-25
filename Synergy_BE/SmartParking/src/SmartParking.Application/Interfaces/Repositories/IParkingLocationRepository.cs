@@ -28,4 +28,13 @@ public interface IParkingLocationRepository
     /// Used for nearby search to show only bookable locations.
     /// </summary>
     Task<IEnumerable<ParkingLocation>> GetActiveWithSlotsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Gets active parking locations with available slots within a bounding box.
+    /// PERFORMANCE: Pre-filters by lat/lng before Haversine calculation.
+    /// </summary>
+    Task<IEnumerable<ParkingLocation>> GetActiveWithinBoundsAsync(
+        double minLat, double maxLat,
+        double minLon, double maxLon,
+        CancellationToken ct = default);
 }

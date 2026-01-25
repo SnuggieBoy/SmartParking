@@ -9,10 +9,14 @@ namespace SmartParking.API.Middlewares;
 public sealed class ExceptionHandlingMiddleware : IMiddleware
 {
     private readonly ILogger<ExceptionHandlingMiddleware> _logger;
+    private readonly IWebHostEnvironment _environment;
 
-    public ExceptionHandlingMiddleware(ILogger<ExceptionHandlingMiddleware> logger)
+    public ExceptionHandlingMiddleware(
+        ILogger<ExceptionHandlingMiddleware> logger,
+        IWebHostEnvironment environment)
     {
         _logger = logger;
+        _environment = environment;
     }
 
     public async Task InvokeAsync(HttpContext context, RequestDelegate next)
@@ -28,10 +32,13 @@ public sealed class ExceptionHandlingMiddleware : IMiddleware
         }
     }
 
-    private static async Task HandleExceptionAsync(HttpContext context, Exception exception)
+    private async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
         context.Response.ContentType = "application/json";
 
+        var isDevelopment = _environment.IsDevelopment();
+
+        // SECURITY: Known business exceptions - safe to expose
         var (statusCode, message, errors) = exception switch
         {
             BusinessException businessEx => (
@@ -54,21 +61,40 @@ public sealed class ExceptionHandlingMiddleware : IMiddleware
                 unauthorizedEx.Message,
                 new[] { unauthorizedEx.Message }
             ),
-            _ => (
-                HttpStatusCode.InternalServerError,
-                Messages.Common.InternalServerError,
-                new[] { exception.Message }
-            )
+            UnauthorizedAccessException uaEx => (
+                HttpStatusCode.Unauthorized,
+                uaEx.Message,
+                new[] { uaEx.Message }
+            ),
+            // SECURITY: Unknown exceptions - sanitize in production
+            _ => isDevelopment
+                ? (
+                    HttpStatusCode.InternalServerError,
+                    exception.Message,
+                    new[] { exception.StackTrace ?? exception.Message }
+                )
+                : (
+                    HttpStatusCode.InternalServerError,
+                    Messages.Common.InternalServerError,  // Generic message only
+                    Array.Empty<string>()  // No error details
+                )
         };
 
         context.Response.StatusCode = (int)statusCode;
+
+        // ALWAYS log full exception server-side (even in production)
+        _logger.LogError(exception,
+            "Unhandled exception: {Message}. Path: {Path}. User: {User}",
+            exception.Message,
+            context.Request.Path,
+            context.User.Identity?.Name ?? "Anonymous");
 
         var response = ApiResponse<object>.FailureResponse(message, errors);
 
         var options = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = true
+            WriteIndented = isDevelopment  // Pretty-print only in development
         };
 
         await context.Response.WriteAsync(JsonSerializer.Serialize(response, options));
