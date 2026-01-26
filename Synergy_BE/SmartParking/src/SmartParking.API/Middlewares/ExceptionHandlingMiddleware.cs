@@ -71,7 +71,12 @@ public sealed class ExceptionHandlingMiddleware : IMiddleware
                 ? (
                     HttpStatusCode.InternalServerError,
                     exception.Message,
-                    new[] { exception.StackTrace ?? exception.Message }
+                    new[] { 
+                        exception.StackTrace ?? exception.Message,
+                        exception.InnerException != null 
+                            ? $"Inner Exception: {exception.InnerException.Message}\n{exception.InnerException.StackTrace}" 
+                            : ""
+                    }
                 )
                 : (
                     HttpStatusCode.InternalServerError,
@@ -83,9 +88,13 @@ public sealed class ExceptionHandlingMiddleware : IMiddleware
         context.Response.StatusCode = (int)statusCode;
 
         // ALWAYS log full exception server-side (even in production)
+        var innerException = exception.InnerException != null 
+            ? $" Inner: {exception.InnerException.Message}" 
+            : "";
         _logger.LogError(exception,
-            "Unhandled exception: {Message}. Path: {Path}. User: {User}",
+            "Unhandled exception: {Message}{InnerException}. Path: {Path}. User: {User}",
             exception.Message,
+            innerException,
             context.Request.Path,
             context.User.Identity?.Name ?? "Anonymous");
 
