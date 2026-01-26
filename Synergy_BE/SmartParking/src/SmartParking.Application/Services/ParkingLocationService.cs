@@ -1,7 +1,7 @@
 using SmartParking.Application.Common.Exceptions;
 using SmartParking.Application.Common.Helpers;
 using SmartParking.Application.Common.Models;
-using SmartParking.Application.DTOs.ParkingLocation;
+using SmartParking.Application.DTOs.Location;
 using SmartParking.Application.Interfaces.Repositories;
 using SmartParking.Application.Interfaces.Services;
 using SmartParking.Domain.Constants;
@@ -9,216 +9,229 @@ using SmartParking.Domain.Entities;
 
 namespace SmartParking.Application.Services;
 
-/// <summary>
-/// Service implementation for parking location management.
-/// Handles geospatial queries using Haversine formula for distance calculation.
-/// </summary>
 public sealed class ParkingLocationService : IParkingLocationService
 {
-    private readonly IParkingLocationRepository _repository;
+    private readonly IParkingLocationRepository _locationRepository;
+    private readonly IParkingLotRepository _parkingLotRepository;
 
-    public ParkingLocationService(IParkingLocationRepository repository)
+    public ParkingLocationService(
+        IParkingLocationRepository locationRepository,
+        IParkingLotRepository parkingLotRepository)
     {
-        _repository = repository;
+        _locationRepository = locationRepository;
+        _parkingLotRepository = parkingLotRepository;
     }
 
-    public async Task CreateAsync(ParkingLocationCreateDto dto, CancellationToken ct = default)
+    public async Task<ParkingLocationResponseDto> GetByIdAsync(Guid locationId, CancellationToken ct = default)
     {
-        // Validate coordinates
-        if (!GeoDistanceHelper.IsValidLatitude(dto.Latitude))
+        var location = await _locationRepository.GetByIdAsync(locationId, includeDeleted: false, ct);
+        if (location == null)
         {
-            throw new BadRequestException("Latitude must be between -90 and 90");
+            throw new NotFoundException("Parking location not found");
         }
 
-        if (!GeoDistanceHelper.IsValidLongitude(dto.Longitude))
+        return MapToResponseDto(location);
+    }
+
+    public async Task<ParkingLocationResponseDto?> GetByParkingLotIdAsync(Guid parkingLotId, CancellationToken ct = default)
+    {
+        var location = await _locationRepository.GetByParkingLotIdAsync(parkingLotId, includeDeleted: false, ct);
+        if (location == null)
         {
-            throw new BadRequestException("Longitude must be between -180 and 180");
+            return null;
         }
 
-        // Validate slots
-        if (dto.AvailableSlots > dto.TotalSlots)
+        return MapToResponseDto(location);
+    }
+
+    public async Task<IEnumerable<ParkingLocationResponseDto>> GetNearbyAsync(
+        NearbyLocationRequestDto request,
+        CancellationToken ct = default)
+    {
+        // Validate radius
+        if (request.RadiusInMeters < 100 || request.RadiusInMeters > 50000)
         {
-            throw new BadRequestException("Available slots cannot exceed total slots");
+            throw new BadRequestException("Radius must be between 100 and 50000 meters");
         }
 
-        if (dto.TotalSlots <= 0)
+        var locations = await _locationRepository.GetNearbyAsync(
+            request.Latitude,
+            request.Longitude,
+            request.RadiusInMeters,
+            ct);
+
+        return locations.Select(loc =>
         {
-            throw new BadRequestException("Total slots must be greater than 0");
+            var distance = GeoDistanceHelper.CalculateDistanceInMeters(
+                request.Latitude,
+                request.Longitude,
+                loc.Latitude,
+                loc.Longitude);
+
+            return MapToResponseDto(loc, distance);
+        }).ToList();
+    }
+
+    public async Task<PagedResult<ParkingLocationResponseDto>> SearchAsync(
+        SearchLocationRequestDto request,
+        CancellationToken ct = default)
+    {
+        var pagedResult = await _locationRepository.SearchAsync(
+            request.Province,
+            request.District,
+            request.Ward,
+            request.SearchTerm,
+            request.Page,
+            request.PageSize,
+            ct);
+
+        var dtos = pagedResult.Items.Select(loc => MapToResponseDto(loc)).ToList();
+
+        return new PagedResult<ParkingLocationResponseDto>(
+            dtos,
+            pagedResult.Page,
+            pagedResult.PageSize,
+            pagedResult.TotalCount);
+    }
+
+    public async Task<ParkingLocationResponseDto> CreateAsync(
+        CreateLocationDto request,
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        // Verify parking lot exists
+        var parkingLot = await _parkingLotRepository.GetByIdAsync(request.ParkingLotId, includeDeleted: false, ct);
+        if (parkingLot == null)
+        {
+            throw new NotFoundException(Messages.ParkingLot.NotFound);
         }
 
-        if (dto.PricePerHour < 0)
+        // Check if location already exists for this parking lot
+        var existing = await _locationRepository.GetByParkingLotIdAsync(request.ParkingLotId, includeDeleted: false, ct);
+        if (existing != null)
         {
-            throw new BadRequestException("Price per hour cannot be negative");
+            throw new BadRequestException("Location already exists for this parking lot");
         }
 
-        var entity = new ParkingLocation
+        var location = new ParkingLocation
         {
-            Id = Guid.NewGuid(),
-            Name = dto.Name,
-            Description = dto.Description,
-            Latitude = dto.Latitude,
-            Longitude = dto.Longitude,
-            Province = dto.Province,
-            District = dto.District,
-            Ward = dto.Ward,
-            Street = dto.Street,
-            Area = dto.Area,
-            FullAddress = dto.FullAddress,
-            TotalSlots = dto.TotalSlots,
-            AvailableSlots = dto.AvailableSlots,
-            PricePerHour = dto.PricePerHour,
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow
+            LocationId = Guid.NewGuid(),
+            ParkingLotId = request.ParkingLotId,
+            Latitude = request.Latitude,
+            Longitude = request.Longitude,
+            Province = request.Province,
+            District = request.District,
+            Ward = request.Ward,
+            Street = request.Street,
+            Area = request.Area,
+            FullAddress = request.FullAddress,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = userId,
+            IsDeleted = false
         };
 
-        await _repository.AddAsync(entity, ct);
+        var created = await _locationRepository.CreateAsync(location, ct);
+        created.ParkingLot = parkingLot; // Set for DTO mapping
+        return MapToResponseDto(created);
     }
 
-    public async Task<PagedResult<ParkingLocationResponseDto>> GetAllAsync(
-        int page = 1,
-        int pageSize = 10,
+    public async Task<ParkingLocationResponseDto> UpdateAsync(
+        Guid locationId,
+        UpdateLocationDto request,
+        Guid userId,
+        bool isAdmin,
         CancellationToken ct = default)
     {
-        // Validate and enforce pagination limits
-        if (page < PaginationConstants.MinPage)
-            page = PaginationConstants.DefaultPage;
-        
-        if (pageSize < PaginationConstants.MinPageSize)
-            pageSize = PaginationConstants.DefaultPageSize;
-        
-        if (pageSize > PaginationConstants.MaxPageSize)
-            pageSize = PaginationConstants.MaxPageSize;
+        var location = await _locationRepository.GetByIdAsync(locationId, includeDeleted: false, ct);
+        if (location == null)
+        {
+            throw new NotFoundException("Parking location not found");
+        }
 
-        var allLocations = await _repository.GetAllAsync(ct);
-        var totalCount = allLocations.Count();
-        
-        var pagedLocations = allLocations
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(loc => MapToDto(loc))
-            .ToList();
+        // SECURITY: Only Admin can update locations (or parking lot owner - can be added)
+        if (!isAdmin)
+        {
+            throw new ForbiddenException("Only administrators can update parking locations");
+        }
 
-        return new PagedResult<ParkingLocationResponseDto>(
-            pagedLocations,
-            page,
-            pageSize,
-            totalCount);
+        if (request.Latitude.HasValue)
+        {
+            location.Latitude = request.Latitude.Value;
+        }
+
+        if (request.Longitude.HasValue)
+        {
+            location.Longitude = request.Longitude.Value;
+        }
+
+        if (request.Province != null)
+        {
+            location.Province = request.Province;
+        }
+
+        if (request.District != null)
+        {
+            location.District = request.District;
+        }
+
+        if (request.Ward != null)
+        {
+            location.Ward = request.Ward;
+        }
+
+        if (request.Street != null)
+        {
+            location.Street = request.Street;
+        }
+
+        if (request.Area != null)
+        {
+            location.Area = request.Area;
+        }
+
+        if (request.FullAddress != null)
+        {
+            location.FullAddress = request.FullAddress;
+        }
+
+        location.UpdatedAt = DateTime.UtcNow;
+        location.UpdatedBy = userId;
+
+        await _locationRepository.UpdateAsync(location, ct);
+        return MapToResponseDto(location);
     }
 
-    public async Task<PagedResult<ParkingLocationResponseDto>> GetNearbyAsync(
-        double latitude,
-        double longitude,
-        double radiusInMeters = 3000,
-        int page = 1,
-        int pageSize = 10,
-        CancellationToken ct = default)
+    public async Task DeleteAsync(Guid locationId, Guid userId, bool isAdmin, CancellationToken ct = default)
     {
-        // Validate user coordinates
-        if (!GeoDistanceHelper.IsValidLatitude(latitude))
+        var location = await _locationRepository.GetByIdAsync(locationId, includeDeleted: false, ct);
+        if (location == null)
         {
-            throw new BadRequestException("Latitude must be between -90 and 90");
+            throw new NotFoundException("Parking location not found");
         }
 
-        if (!GeoDistanceHelper.IsValidLongitude(longitude))
+        // SECURITY: Only Admin can delete locations
+        if (!isAdmin)
         {
-            throw new BadRequestException("Longitude must be between -180 and 180");
+            throw new ForbiddenException("Only administrators can delete parking locations");
         }
 
-        if (radiusInMeters <= 0)
-        {
-            throw new BadRequestException("Radius must be greater than 0");
-        }
-
-        // Validate and enforce pagination limits
-        if (page < PaginationConstants.MinPage)
-            page = PaginationConstants.DefaultPage;
-        
-        if (pageSize < PaginationConstants.MinPageSize)
-            pageSize = PaginationConstants.DefaultPageSize;
-        
-        if (pageSize > PaginationConstants.MaxPageSize)
-            pageSize = PaginationConstants.MaxPageSize;
-
-        // PERFORMANCE OPTIMIZATION: Calculate bounding box to pre-filter candidates
-        var (minLat, maxLat, minLon, maxLon) = GeoDistanceHelper.GetBoundingBox(
-            latitude, longitude, radiusInMeters);
-
-        // Get active locations within bounding box (reduces candidate set significantly)
-        var locations = await _repository.GetActiveWithinBoundsAsync(
-            minLat, maxLat, minLon, maxLon, ct);
-
-        // Calculate precise distance for remaining candidates and filter by exact radius
-        var nearbyLocationsWithDistance = locations
-            .Select(loc => new
-            {
-                Location = loc,
-                Distance = GeoDistanceHelper.CalculateDistanceInMeters(
-                    latitude, longitude,
-                    loc.Latitude, loc.Longitude)
-            })
-            .Where(x => x.Distance <= radiusInMeters)
-            .OrderBy(x => x.Distance)
-            .ToList();
-
-        var totalCount = nearbyLocationsWithDistance.Count;
-
-        var pagedLocations = nearbyLocationsWithDistance
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(x => MapToDto(x.Location, x.Distance))
-            .ToList();
-
-        return new PagedResult<ParkingLocationResponseDto>(
-            pagedLocations,
-            page,
-            pageSize,
-            totalCount);
+        await _locationRepository.SoftDeleteAsync(locationId, userId, ct);
     }
 
-    /// <summary>
-    /// Maps ParkingLocation entity to DTO without distance.
-    /// </summary>
-    private static ParkingLocationResponseDto MapToDto(ParkingLocation entity)
+    private static ParkingLocationResponseDto MapToResponseDto(ParkingLocation location, double? distanceInMeters = null)
     {
         return new ParkingLocationResponseDto(
-            Id: entity.Id,
-            Name: entity.Name,
-            Description: entity.Description,
-            Latitude: entity.Latitude,
-            Longitude: entity.Longitude,
-            Province: entity.Province,
-            District: entity.District,
-            Ward: entity.Ward,
-            FullAddress: entity.FullAddress,
-            AvailableSlots: entity.AvailableSlots,
-            TotalSlots: entity.TotalSlots,
-            PricePerHour: entity.PricePerHour,
-            IsActive: entity.IsActive,
-            Distance: null
-        );
-    }
-
-    /// <summary>
-    /// Maps ParkingLocation entity to DTO with calculated distance.
-    /// Used for nearby search results.
-    /// </summary>
-    private static ParkingLocationResponseDto MapToDto(ParkingLocation entity, double distance)
-    {
-        return new ParkingLocationResponseDto(
-            Id: entity.Id,
-            Name: entity.Name,
-            Description: entity.Description,
-            Latitude: entity.Latitude,
-            Longitude: entity.Longitude,
-            Province: entity.Province,
-            District: entity.District,
-            Ward: entity.Ward,
-            FullAddress: entity.FullAddress,
-            AvailableSlots: entity.AvailableSlots,
-            TotalSlots: entity.TotalSlots,
-            PricePerHour: entity.PricePerHour,
-            IsActive: entity.IsActive,
-            Distance: Math.Round(distance, 2) // Round to 2 decimal places
+            LocationId: location.LocationId,
+            ParkingLotId: location.ParkingLotId,
+            ParkingLotName: location.ParkingLot?.Name ?? "Unknown",
+            Latitude: location.Latitude,
+            Longitude: location.Longitude,
+            Province: location.Province,
+            District: location.District,
+            Ward: location.Ward,
+            Street: location.Street,
+            FullAddress: location.FullAddress,
+            DistanceInMeters: distanceInMeters
         );
     }
 }

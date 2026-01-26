@@ -1,40 +1,26 @@
+using SmartParking.Application.Common.Models;
 using SmartParking.Domain.Entities;
 
 namespace SmartParking.Application.Interfaces.Repositories;
 
-/// <summary>
-/// Repository interface for ParkingLocation entity.
-/// Provides data access methods for parking location management.
-/// </summary>
 public interface IParkingLocationRepository
 {
-    /// <summary>
-    /// Adds a new parking location to the database.
-    /// </summary>
-    Task AddAsync(ParkingLocation entity, CancellationToken ct = default);
-
-    /// <summary>
-    /// Retrieves all parking locations (including inactive).
-    /// </summary>
-    Task<IEnumerable<ParkingLocation>> GetAllAsync(CancellationToken ct = default);
-
-    /// <summary>
-    /// Retrieves a parking location by ID.
-    /// </summary>
-    Task<ParkingLocation?> GetByIdAsync(Guid id, CancellationToken ct = default);
-
-    /// <summary>
-    /// Retrieves only active parking locations with available slots.
-    /// Used for nearby search to show only bookable locations.
-    /// </summary>
-    Task<IEnumerable<ParkingLocation>> GetActiveWithSlotsAsync(CancellationToken ct = default);
-
-    /// <summary>
-    /// Gets active parking locations with available slots within a bounding box.
-    /// PERFORMANCE: Pre-filters by lat/lng before Haversine calculation.
-    /// </summary>
-    Task<IEnumerable<ParkingLocation>> GetActiveWithinBoundsAsync(
-        double minLat, double maxLat,
-        double minLon, double maxLon,
+    Task<ParkingLocation?> GetByIdAsync(Guid locationId, bool includeDeleted = false, CancellationToken ct = default);
+    Task<ParkingLocation?> GetByParkingLotIdAsync(Guid parkingLotId, bool includeDeleted = false, CancellationToken ct = default);
+    Task<IEnumerable<ParkingLocation>> GetNearbyAsync(
+        decimal centerLat,
+        decimal centerLon,
+        double radiusMeters,
         CancellationToken ct = default);
+    Task<PagedResult<ParkingLocation>> SearchAsync(
+        string? province,
+        string? district,
+        string? ward,
+        string? searchTerm,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
+    Task<ParkingLocation> CreateAsync(ParkingLocation location, CancellationToken ct = default);
+    Task UpdateAsync(ParkingLocation location, CancellationToken ct = default);
+    Task SoftDeleteAsync(Guid locationId, Guid deletedBy, CancellationToken ct = default);
 }

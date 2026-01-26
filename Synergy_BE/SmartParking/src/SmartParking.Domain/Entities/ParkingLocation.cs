@@ -1,34 +1,28 @@
-using SmartParking.Domain.Interfaces;
+#nullable enable
+using System;
 
 namespace SmartParking.Domain.Entities;
 
 /// <summary>
-/// Parking location entity for map-based parking lot discovery.
-/// Stores geolocation data and address details for spatial queries.
+/// Parking location entity for geospatial search and map integration
 /// </summary>
-public partial class ParkingLocation : IAuditable, ISoftDeletable
+public partial class ParkingLocation
 {
-    public Guid Id { get; set; }
+    public Guid LocationId { get; set; }
 
-    public string Name { get; set; } = null!;
+    public Guid ParkingLotId { get; set; }
 
-    public string? Description { get; set; }
+    // Geographic coordinates
+    public decimal Latitude { get; set; }
 
-    /// <summary>
-    /// Latitude coordinate (valid range: -90 to 90)
-    /// </summary>
-    public double Latitude { get; set; }
+    public decimal Longitude { get; set; }
 
-    /// <summary>
-    /// Longitude coordinate (valid range: -180 to 180)
-    /// </summary>
-    public double Longitude { get; set; }
+    // Address components
+    public string? Province { get; set; }
 
-    public string Province { get; set; } = null!;
+    public string? District { get; set; }
 
-    public string District { get; set; } = null!;
-
-    public string Ward { get; set; } = null!;
+    public string? Ward { get; set; }
 
     public string? Street { get; set; }
 
@@ -36,27 +30,22 @@ public partial class ParkingLocation : IAuditable, ISoftDeletable
 
     public string? FullAddress { get; set; }
 
-    public int TotalSlots { get; set; }
-
-    public int AvailableSlots { get; set; }
-
-    public decimal PricePerHour { get; set; }
-
-    public bool IsActive { get; set; }
-
-    // IAuditable properties
+    // Audit fields
     public DateTime CreatedAt { get; set; }
-
-    public Guid? CreatedBy { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
 
+    public Guid? CreatedBy { get; set; }
+
     public Guid? UpdatedBy { get; set; }
 
-    // ISoftDeletable properties
+    // Soft delete
     public bool IsDeleted { get; set; }
 
     public DateTime? DeletedAt { get; set; }
 
     public Guid? DeletedBy { get; set; }
+
+    // Navigation property
+    public virtual ParkingLot ParkingLot { get; set; } = null!;
 }

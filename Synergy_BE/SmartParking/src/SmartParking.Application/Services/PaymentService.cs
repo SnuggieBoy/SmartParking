@@ -41,7 +41,7 @@ public sealed class PaymentService : IPaymentService
             throw new NotFoundException(Messages.Payment.TransactionNotFound);
         }
 
-        var paidAt = payment.PaymentStatus == nameof(PaymentStatus.Success)
+        DateTime? paidAt = payment.PaymentStatus == nameof(PaymentStatus.Success)
             ? payment.CreatedAt
             : null;
 

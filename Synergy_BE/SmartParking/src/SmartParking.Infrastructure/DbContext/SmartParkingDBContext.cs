@@ -79,20 +79,41 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
         {
             entity.HasKey(e => e.BookingId).HasName("PK__Bookings__73951AEDA4381824");
 
-            entity.HasIndex(e => e.UserId, "IX_Bookings_UserId");
-
             entity.Property(e => e.BookingId).HasDefaultValueSql("(newid())");
-            entity.Property(e => e.BookingTime).HasDefaultValueSql("(getdate())");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
-            entity.Property(e => e.TotalAmount).HasColumnType("decimal(18, 2)");
-            entity.Property(e => e.CheckInTime);
-            entity.Property(e => e.CheckOutTime);
+            entity.Property(e => e.BookingTime)
+                .IsRequired()
+                .HasDefaultValueSql("(getutcdate())");
+            entity.Property(e => e.StartTime).IsRequired();
+            entity.Property(e => e.EndTime).IsRequired();
+            entity.Property(e => e.Status)
+                .IsRequired()
+                .HasMaxLength(20)
+                .HasDefaultValue("Pending");
+            entity.Property(e => e.TotalAmount)
+                .IsRequired()
+                .HasColumnType("decimal(18, 2)")
+                .HasDefaultValue(0);
+            entity.Property(e => e.CreatedAt)
+                .IsRequired()
+                .HasDefaultValueSql("(getutcdate())");
+            entity.Property(e => e.UpdatedAt);
+            entity.Property(e => e.IsDeleted)
+                .HasDefaultValue(false);
             entity.Property(e => e.RowVersion)
                 .IsRequired()
                 .IsRowVersion()
                 .IsConcurrencyToken();
-            entity.Property(e => e.Status).HasMaxLength(20);
 
+            // Indexes
+            entity.HasIndex(e => e.IsDeleted)
+                .HasDatabaseName("IX_Bookings_IsDeleted")
+                .HasFilter("[IsDeleted] = 0");
+                
+            entity.HasIndex(e => new { e.UserId, e.IsDeleted })
+                .HasDatabaseName("IX_Bookings_UserId_IsDeleted")
+                .HasFilter("[IsDeleted] = 0");
+
+            // Relationships
             entity.HasOne(d => d.ParkingLot).WithMany(p => p.Bookings)
                 .HasForeignKey(d => d.ParkingLotId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
@@ -107,6 +128,9 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
                 .HasForeignKey(d => d.VehicleId)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("FK__Bookings__VehicleId__ABCD1234");
+                
+            // Global query filter for soft delete
+            entity.HasQueryFilter(e => !e.IsDeleted);
         });
 
         modelBuilder.Entity<EmailOtp>(entity =>
@@ -215,23 +239,50 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
         {
             entity.HasKey(e => e.PaymentId).HasName("PK__PaymentT__9B556A38C863861B");
 
-            entity.HasIndex(e => e.UserId, "IX_Payment_UserId");
-
-            entity.HasIndex(e => e.VnpTxnRef, "UQ__PaymentT__543AE428112BE98D").IsUnique();
-
             entity.Property(e => e.PaymentId).HasDefaultValueSql("(newid())");
-            entity.Property(e => e.Amount).HasColumnType("decimal(12, 2)");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
+            entity.Property(e => e.Amount)
+                .IsRequired()
+                .HasColumnType("decimal(12, 2)");
             entity.Property(e => e.PaymentMethod)
+                .IsRequired()
                 .HasMaxLength(20)
                 .HasDefaultValue("VNPay");
-            entity.Property(e => e.PaymentStatus).HasMaxLength(20);
-            entity.Property(e => e.VnpResponseCode).HasMaxLength(10);
-            entity.Property(e => e.VnpTransactionNo).HasMaxLength(100);
+            entity.Property(e => e.PaymentStatus)
+                .IsRequired()
+                .HasMaxLength(20)
+                .HasDefaultValue("Pending");
             entity.Property(e => e.VnpTxnRef)
                 .IsRequired()
                 .HasMaxLength(100);
+            entity.Property(e => e.VnpTransactionNo).HasMaxLength(100);
+            entity.Property(e => e.VnpResponseCode).HasMaxLength(10);
+            entity.Property(e => e.VnpBankCode).HasMaxLength(50);
+            entity.Property(e => e.VnpCardType).HasMaxLength(50);
+            entity.Property(e => e.RefundAmount).HasColumnType("decimal(12, 2)");
+            entity.Property(e => e.RefundReason).HasMaxLength(500);
+            entity.Property(e => e.Metadata).HasMaxLength(4000);
+            entity.Property(e => e.CreatedAt)
+                .IsRequired()
+                .HasDefaultValueSql("(getutcdate())");
+            entity.Property(e => e.UpdatedAt);
+            entity.Property(e => e.IsDeleted)
+                .HasDefaultValue(false);
 
+            // Indexes
+            entity.HasIndex(e => e.VnpTxnRef)
+                .IsUnique()
+                .HasDatabaseName("IX_PaymentTransactions_VnpTxnRef")
+                .HasFilter("[IsDeleted] = 0");
+                
+            entity.HasIndex(e => e.IsDeleted)
+                .HasDatabaseName("IX_PaymentTransactions_IsDeleted")
+                .HasFilter("[IsDeleted] = 0");
+                
+            entity.HasIndex(e => new { e.UserId, e.IsDeleted })
+                .HasDatabaseName("IX_PaymentTransactions_UserId_IsDeleted")
+                .HasFilter("[IsDeleted] = 0");
+
+            // Relationships
             entity.HasOne(d => d.Booking).WithMany(p => p.PaymentTransactions)
                 .HasForeignKey(d => d.BookingId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
@@ -241,6 +292,9 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__PaymentTr__UserI__76969D2E");
+                
+            // Global query filter for soft delete
+            entity.HasQueryFilter(e => !e.IsDeleted);
         });
 
         modelBuilder.Entity<Role>(entity =>
@@ -338,37 +392,59 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
 
         modelBuilder.Entity<ParkingLocation>(entity =>
         {
-            entity.HasKey(e => e.Id);
+            entity.HasKey(e => e.LocationId).HasName("PK_ParkingLocations");
 
-            entity.Property(e => e.Id).HasDefaultValueSql("(newid())");
-            entity.Property(e => e.Name)
+            entity.Property(e => e.LocationId).HasDefaultValueSql("(newid())");
+            entity.Property(e => e.ParkingLotId).IsRequired();
+            entity.Property(e => e.Latitude)
                 .IsRequired()
-                .HasMaxLength(100);
-            entity.Property(e => e.Description).HasMaxLength(500);
-            entity.Property(e => e.Latitude).IsRequired();
-            entity.Property(e => e.Longitude).IsRequired();
-            entity.Property(e => e.Province)
+                .HasColumnType("decimal(10, 7)");
+            entity.Property(e => e.Longitude)
                 .IsRequired()
-                .HasMaxLength(100);
-            entity.Property(e => e.District)
-                .IsRequired()
-                .HasMaxLength(100);
-            entity.Property(e => e.Ward)
-                .IsRequired()
-                .HasMaxLength(100);
-            entity.Property(e => e.Street).HasMaxLength(200);
-            entity.Property(e => e.Area).HasMaxLength(100);
+                .HasColumnType("decimal(10, 7)");
+            entity.Property(e => e.Province).HasMaxLength(100);
+            entity.Property(e => e.District).HasMaxLength(100);
+            entity.Property(e => e.Ward).HasMaxLength(100);
+            entity.Property(e => e.Street).HasMaxLength(255);
+            entity.Property(e => e.Area).HasMaxLength(255);
             entity.Property(e => e.FullAddress).HasMaxLength(500);
-            entity.Property(e => e.TotalSlots).IsRequired();
-            entity.Property(e => e.AvailableSlots).IsRequired();
-            entity.Property(e => e.PricePerHour)
+            entity.Property(e => e.CreatedAt)
                 .IsRequired()
-                .HasColumnType("decimal(10, 2)");
-            entity.Property(e => e.IsActive).HasDefaultValue(true);
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
+                .HasDefaultValueSql("(getutcdate())");
+            entity.Property(e => e.UpdatedAt);
+            entity.Property(e => e.IsDeleted)
+                .HasDefaultValue(false);
 
-            // Index for active locations query optimization
-            entity.HasIndex(e => e.IsActive);
+            // Check constraints for valid coordinates
+            entity.HasCheckConstraint("CK_ParkingLocations_Latitude", "[Latitude] >= -90 AND [Latitude] <= 90");
+            entity.HasCheckConstraint("CK_ParkingLocations_Longitude", "[Longitude] >= -180 AND [Longitude] <= 180");
+
+            // Indexes
+            entity.HasIndex(e => e.IsDeleted)
+                .HasDatabaseName("IX_ParkingLocations_IsDeleted")
+                .HasFilter("[IsDeleted] = 0");
+                
+            entity.HasIndex(e => new { e.Latitude, e.Longitude })
+                .HasDatabaseName("IX_ParkingLocations_Lat_Lng")
+                .HasFilter("[IsDeleted] = 0");
+                
+            entity.HasIndex(e => new { e.Province, e.District })
+                .HasDatabaseName("IX_ParkingLocations_Province_District")
+                .HasFilter("[IsDeleted] = 0");
+                
+            entity.HasIndex(e => e.ParkingLotId)
+                .IsUnique()
+                .HasDatabaseName("UQ_ParkingLocations_ParkingLotId")
+                .HasFilter("[IsDeleted] = 0");
+
+            // Relationships
+            entity.HasOne(d => d.ParkingLot).WithMany()
+                .HasForeignKey(d => d.ParkingLotId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ParkingLocations_ParkingLots");
+                
+            // Global query filter for soft delete
+            entity.HasQueryFilter(e => !e.IsDeleted);
         });
 
         // Global query filter for soft delete

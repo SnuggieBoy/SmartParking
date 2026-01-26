@@ -17,13 +17,14 @@ public sealed class PaymentRepository : IPaymentRepository
     public async Task<PaymentTransaction?> GetByTxnRefAsync(string txnRef, CancellationToken ct = default)
     {
         return await _context.PaymentTransactions
-            .FirstOrDefaultAsync(p => p.VnpTxnRef == txnRef, ct);
+            .Where(p => p.VnpTxnRef == txnRef && !p.IsDeleted)
+            .FirstOrDefaultAsync(ct);
     }
 
     public async Task<PaymentTransaction?> GetLatestByBookingIdAsync(Guid bookingId, CancellationToken ct = default)
     {
         return await _context.PaymentTransactions
-            .Where(p => p.BookingId == bookingId)
+            .Where(p => p.BookingId == bookingId && !p.IsDeleted)
             .OrderByDescending(p => p.CreatedAt)
             .FirstOrDefaultAsync(ct);
     }
