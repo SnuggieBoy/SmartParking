@@ -45,49 +45,6 @@ public sealed class AuthenticationService : IAuthenticationService
         _emailService = emailService;
     }
 
-    public async Task<AuthResponseDto> RegisterAsync(RegisterRequestDto request, CancellationToken ct = default)
-    {
-        var existingUser = await _userRepository.GetByEmailAsync(request.Email, ct);
-        if (existingUser != null)
-        {
-            throw new BadRequestException(Messages.Auth.EmailAlreadyExists);
-        }
-
-        var userRole = await _roleRepository.GetByNameAsync(AuthConstants.Roles.User, ct);
-        if (userRole == null)
-        {
-            throw new NotFoundException(Messages.Auth.RoleNotFound);
-        }
-
-        var user = new User
-        {
-            UserId = Guid.NewGuid(),
-            FullName = request.FullName,
-            Email = request.Email,
-            Phone = request.Phone,
-            RoleId = userRole.RoleId,
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        user = await _userRepository.CreateAsync(user, ct);
-
-        var userAuth = new UserAuth
-        {
-            AuthId = Guid.NewGuid(),
-            UserId = user.UserId,
-            Provider = AuthConstants.LocalProvider,
-            ProviderUserId = user.Email,
-            PasswordHash = _passwordHasher.HashPassword(request.Password),
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await _userAuthRepository.CreateAsync(userAuth, ct);
-
-        user.Role = userRole;
-        return await GenerateAuthResponse(user, ct);
-    }
-
     #region OTP-based Registration Flow
 
     public async Task RegisterRequestOtpAsync(RegisterRequestDto request, CancellationToken ct = default)
@@ -107,14 +64,20 @@ public sealed class AuthenticationService : IAuthenticationService
         }
 
         // Check if there's a recent OTP request (rate limiting)
-        var existingOtp = await _emailOtpRepository.GetLatestUnusedByEmailAsync(request.Email, ct);
+        var existingOtp = await _emailOtpRepository.GetLatestUnusedByEmailAsync(
+            request.Email, 
+            Domain.Constants.OtpType.Registration, 
+            ct);
         if (existingOtp != null && existingOtp.CreatedAt.AddSeconds(RESEND_OTP_COOLDOWN_SECONDS) > DateTime.UtcNow)
         {
             throw new BadRequestException(Messages.Auth.TooManyOtpRequests);
         }
 
-        // Invalidate all previous OTPs for this email
-        await _emailOtpRepository.InvalidateAllByEmailAsync(request.Email, ct);
+        // Invalidate all previous registration OTPs for this email
+        await _emailOtpRepository.InvalidateAllByEmailAsync(
+            request.Email, 
+            Domain.Constants.OtpType.Registration, 
+            ct);
 
         // Generate secure random OTP
         var otpCode = GenerateOtpCode();
@@ -128,6 +91,7 @@ public sealed class AuthenticationService : IAuthenticationService
             OtpId = Guid.NewGuid(),
             Email = request.Email,
             OtpCode = otpCode,
+            OtpType = Domain.Constants.OtpType.Registration,
             ExpiredAt = DateTime.UtcNow.AddMinutes(OTP_EXPIRY_MINUTES),
             IsUsed = false,
             CreatedAt = DateTime.UtcNow,
@@ -144,8 +108,11 @@ public sealed class AuthenticationService : IAuthenticationService
 
     public async Task<AuthResponseDto> VerifyOtpAndRegisterAsync(VerifyOtpRequestDto request, CancellationToken ct = default)
     {
-        // Get latest unused OTP for email
-        var emailOtp = await _emailOtpRepository.GetLatestUnusedByEmailAsync(request.Email, ct);
+        // Get latest unused registration OTP for email
+        var emailOtp = await _emailOtpRepository.GetLatestUnusedByEmailAsync(
+            request.Email, 
+            Domain.Constants.OtpType.Registration, 
+            ct);
         
         if (emailOtp == null)
         {
@@ -226,7 +193,10 @@ public sealed class AuthenticationService : IAuthenticationService
         }
 
         // Check for recent OTP request (rate limiting)
-        var latestOtp = await _emailOtpRepository.GetLatestUnusedByEmailAsync(request.Email, ct);
+        var latestOtp = await _emailOtpRepository.GetLatestUnusedByEmailAsync(
+            request.Email, 
+            Domain.Constants.OtpType.Registration, 
+            ct);
         if (latestOtp != null && latestOtp.CreatedAt.AddSeconds(RESEND_OTP_COOLDOWN_SECONDS) > DateTime.UtcNow)
         {
             throw new BadRequestException(Messages.Auth.TooManyOtpRequests);
@@ -238,8 +208,11 @@ public sealed class AuthenticationService : IAuthenticationService
             throw new BadRequestException(Messages.Auth.OtpNotFound);
         }
 
-        // Invalidate all previous OTPs
-        await _emailOtpRepository.InvalidateAllByEmailAsync(request.Email, ct);
+        // Invalidate all previous registration OTPs
+        await _emailOtpRepository.InvalidateAllByEmailAsync(
+            request.Email, 
+            Domain.Constants.OtpType.Registration, 
+            ct);
 
         // Generate new OTP
         var otpCode = GenerateOtpCode();
@@ -250,6 +223,7 @@ public sealed class AuthenticationService : IAuthenticationService
             OtpId = Guid.NewGuid(),
             Email = request.Email,
             OtpCode = otpCode,
+            OtpType = Domain.Constants.OtpType.Registration,
             ExpiredAt = DateTime.UtcNow.AddMinutes(OTP_EXPIRY_MINUTES),
             IsUsed = false,
             CreatedAt = DateTime.UtcNow,
@@ -433,6 +407,136 @@ public sealed class AuthenticationService : IAuthenticationService
         // Revoke all existing tokens (force re-login for security)
         await _tokenRepository.RevokeByUserIdAsync(userId, ct);
     }
+
+    #region Password Reset with OTP
+
+    public async Task ForgotPasswordAsync(ForgotPasswordRequestDto request, CancellationToken ct = default)
+    {
+        // Check if user exists
+        var user = await _userRepository.GetByEmailAsync(request.Email, ct);
+        if (user == null)
+        {
+            throw new NotFoundException(Messages.Auth.PasswordResetUserNotFound);
+        }
+
+        // Check if user has email verified
+        if (!user.EmailConfirmed)
+        {
+            throw new BadRequestException(Messages.Auth.EmailNotVerified);
+        }
+
+        // Check for rate limiting (prevent OTP spam)
+        var latestOtp = await _emailOtpRepository.GetLatestUnusedByEmailAsync(
+            request.Email, 
+            Domain.Constants.OtpType.PasswordReset, 
+            ct);
+            
+        if (latestOtp != null && 
+            latestOtp.CreatedAt.AddSeconds(RESEND_OTP_COOLDOWN_SECONDS) > DateTime.UtcNow)
+        {
+            throw new BadRequestException(Messages.Auth.TooManyOtpRequests);
+        }
+
+        // Invalidate all previous password reset OTPs for this email
+        await _emailOtpRepository.InvalidateAllByEmailAsync(
+            request.Email, 
+            Domain.Constants.OtpType.PasswordReset, 
+            ct);
+
+        // Generate new OTP
+        var otpCode = GenerateOtpCode();
+
+        // Create OTP record
+        var emailOtp = new EmailOtp
+        {
+            OtpId = Guid.NewGuid(),
+            Email = request.Email,
+            OtpCode = otpCode,
+            OtpType = Domain.Constants.OtpType.PasswordReset,
+            ExpiredAt = DateTime.UtcNow.AddMinutes(OTP_EXPIRY_MINUTES),
+            IsUsed = false,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _emailOtpRepository.CreateAsync(emailOtp, ct);
+
+        // Send password reset OTP email
+        await _emailService.SendPasswordResetOtpAsync(request.Email, otpCode, user.FullName, ct);
+    }
+
+    public async Task ResetPasswordAsync(ResetPasswordRequestDto request, CancellationToken ct = default)
+    {
+        // Get latest unused password reset OTP for email
+        var emailOtp = await _emailOtpRepository.GetLatestUnusedByEmailAsync(
+            request.Email, 
+            Domain.Constants.OtpType.PasswordReset, 
+            ct);
+        
+        if (emailOtp == null)
+        {
+            throw new BadRequestException(Messages.Auth.InvalidPasswordResetOtp);
+        }
+
+        // Check if OTP is expired
+        if (emailOtp.ExpiredAt < DateTime.UtcNow)
+        {
+            throw new BadRequestException(Messages.Auth.OtpExpired);
+        }
+
+        // Verify OTP code
+        if (emailOtp.OtpCode != request.OtpCode)
+        {
+            throw new BadRequestException(Messages.Auth.InvalidPasswordResetOtp);
+        }
+
+        // Check if already used (race condition protection)
+        if (emailOtp.IsUsed)
+        {
+            throw new BadRequestException(Messages.Auth.OtpAlreadyUsed);
+        }
+
+        // Mark OTP as used
+        await _emailOtpRepository.MarkAsUsedAsync(emailOtp.OtpId, ct);
+
+        // Get user
+        var user = await _userRepository.GetByEmailAsync(request.Email, ct);
+        if (user == null)
+        {
+            throw new NotFoundException(Messages.Auth.UserNotFound);
+        }
+
+        // Get user auth for local provider
+        var userAuth = await _userAuthRepository.GetByProviderUserIdAsync(
+            AuthConstants.LocalProvider, 
+            user.Email, 
+            ct);
+
+        // If user auth doesn't exist, create it (for Google-only users who want to set password)
+        if (userAuth == null)
+        {
+            userAuth = new UserAuth
+            {
+                AuthId = Guid.NewGuid(),
+                UserId = user.UserId,
+                Provider = AuthConstants.LocalProvider,
+                ProviderUserId = user.Email,
+                PasswordHash = _passwordHasher.HashPassword(request.NewPassword),
+                CreatedAt = DateTime.UtcNow
+            };
+            await _userAuthRepository.CreateAsync(userAuth, ct);
+        }
+        else
+        {
+            // Update existing password
+            userAuth.PasswordHash = _passwordHasher.HashPassword(request.NewPassword);
+            await _userAuthRepository.UpdateAsync(userAuth, ct);
+        }
+
+        // Revoke all existing tokens (force re-login with new password)
+        await _tokenRepository.RevokeByUserIdAsync(user.UserId, ct);
+    }
+
+    #endregion
 
     private async Task<AuthResponseDto> GenerateAuthResponse(User user, CancellationToken ct)
     {

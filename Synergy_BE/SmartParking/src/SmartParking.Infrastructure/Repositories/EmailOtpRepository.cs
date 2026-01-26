@@ -21,10 +21,17 @@ public sealed class EmailOtpRepository : IEmailOtpRepository
         return emailOtp;
     }
 
-    public async Task<EmailOtp?> GetLatestUnusedByEmailAsync(string email, CancellationToken ct = default)
+    public async Task<EmailOtp?> GetLatestUnusedByEmailAsync(string email, string? otpType = null, CancellationToken ct = default)
     {
-        return await _context.EmailOtps
-            .Where(otp => otp.Email == email && !otp.IsUsed && otp.ExpiredAt > DateTime.UtcNow)
+        var query = _context.EmailOtps
+            .Where(otp => otp.Email == email && !otp.IsUsed && otp.ExpiredAt > DateTime.UtcNow);
+        
+        if (!string.IsNullOrEmpty(otpType))
+        {
+            query = query.Where(otp => otp.OtpType == otpType);
+        }
+        
+        return await query
             .OrderByDescending(otp => otp.CreatedAt)
             .FirstOrDefaultAsync(ct);
     }
@@ -39,11 +46,17 @@ public sealed class EmailOtpRepository : IEmailOtpRepository
         }
     }
 
-    public async Task InvalidateAllByEmailAsync(string email, CancellationToken ct = default)
+    public async Task InvalidateAllByEmailAsync(string email, string? otpType = null, CancellationToken ct = default)
     {
-        await _context.EmailOtps
-            .Where(otp => otp.Email == email && !otp.IsUsed)
-            .ExecuteUpdateAsync(s => s.SetProperty(otp => otp.IsUsed, true), ct);
+        var query = _context.EmailOtps
+            .Where(otp => otp.Email == email && !otp.IsUsed);
+        
+        if (!string.IsNullOrEmpty(otpType))
+        {
+            query = query.Where(otp => otp.OtpType == otpType);
+        }
+        
+        await query.ExecuteUpdateAsync(s => s.SetProperty(otp => otp.IsUsed, true), ct);
     }
 
     public async Task<int> CleanupExpiredAsync(DateTime olderThan, CancellationToken ct = default)

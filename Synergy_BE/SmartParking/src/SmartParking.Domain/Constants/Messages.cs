@@ -31,6 +31,12 @@ public static class Messages
         public const string EmailNotVerified = "Please verify your email before logging in";
         public const string TooManyOtpRequests = "Too many OTP requests. Please try again in 60 seconds";
         public const string PendingRegistration = "Registration pending. Please verify your email first.";
+        
+        // Password Reset Messages
+        public const string PasswordResetOtpSent = "Password reset OTP has been sent to your email";
+        public const string PasswordResetSuccess = "Password reset successfully. You can now login with your new password.";
+        public const string InvalidPasswordResetOtp = "Invalid or expired OTP. Please request a new password reset.";
+        public const string PasswordResetUserNotFound = "No account found with this email address";
     }
 
     public static class ParkingLot

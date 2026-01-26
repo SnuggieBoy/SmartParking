@@ -5,7 +5,7 @@ namespace SmartParking.Domain.Entities;
 
 /// <summary>
 /// Entity for storing Email OTP verification codes
-/// Used for registration verification before creating User account
+/// Used for registration verification and password reset
 /// </summary>
 public partial class EmailOtp
 {
@@ -14,6 +14,11 @@ public partial class EmailOtp
     public string Email { get; set; } = null!;
     
     public string OtpCode { get; set; } = null!;
+    
+    /// <summary>
+    /// Type of OTP: "Registration" or "PasswordReset"
+    /// </summary>
+    public string OtpType { get; set; } = "Registration";
     
     public DateTime ExpiredAt { get; set; }
     

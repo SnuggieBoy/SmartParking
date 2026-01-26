@@ -13,9 +13,9 @@ public interface IEmailOtpRepository
     Task<EmailOtp> CreateAsync(EmailOtp emailOtp, CancellationToken ct = default);
     
     /// <summary>
-    /// Gets the latest unused OTP for an email
+    /// Gets the latest unused OTP for an email (optionally filtered by type)
     /// </summary>
-    Task<EmailOtp?> GetLatestUnusedByEmailAsync(string email, CancellationToken ct = default);
+    Task<EmailOtp?> GetLatestUnusedByEmailAsync(string email, string? otpType = null, CancellationToken ct = default);
     
     /// <summary>
     /// Marks an OTP as used
@@ -23,9 +23,9 @@ public interface IEmailOtpRepository
     Task MarkAsUsedAsync(Guid otpId, CancellationToken ct = default);
     
     /// <summary>
-    /// Invalidates all unused OTPs for an email (for resend scenarios)
+    /// Invalidates all unused OTPs for an email (optionally filtered by type)
     /// </summary>
-    Task InvalidateAllByEmailAsync(string email, CancellationToken ct = default);
+    Task InvalidateAllByEmailAsync(string email, string? otpType = null, CancellationToken ct = default);
     
     /// <summary>
     /// Cleans up expired OTPs (older than specified time)

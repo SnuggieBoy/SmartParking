@@ -72,31 +72,6 @@ public sealed class AuthenticationController : BaseApiController
         return Ok(ApiResponse.SuccessResponse(Messages.Auth.OtpResentSuccess));
     }
 
-    /// <summary>
-    /// [DEPRECATED] Legacy registration without OTP - Use register-request + verify-otp instead
-    /// </summary>
-    [HttpPost("register")]
-    [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status201Created)]
-    [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status400BadRequest)]
-    [ApiExplorerSettings(IgnoreApi = true)] // Hide from Swagger
-    public async Task<ActionResult<ApiResponse<AuthResponseDto>>> Register(
-        [FromBody] RegisterRequest request,
-        CancellationToken ct)
-    {
-        var dto = new RegisterRequestDto(
-            request.FullName,
-            request.Email,
-            request.Phone,
-            request.Password
-        );
-
-        var response = await _authService.RegisterAsync(dto, ct);
-        return CreatedAtAction(
-            nameof(Register),
-            ApiResponse<AuthResponseDto>.SuccessResponse(response, Messages.Auth.RegisterSuccess)
-        );
-    }
-
     [HttpPost("login")]
     [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status401Unauthorized)]
@@ -167,5 +142,42 @@ public sealed class AuthenticationController : BaseApiController
 
         await _authService.ChangePasswordAsync(userId, dto, ct);
         return Ok(ApiResponse.SuccessResponse(Messages.Auth.PasswordChangedSuccess));
+    }
+
+    /// <summary>
+    /// Forgot Password - Step 1: Send OTP to email for password reset
+    /// </summary>
+    [HttpPost("forgot-password")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse>> ForgotPassword(
+        [FromBody] ForgotPasswordRequest request,
+        CancellationToken ct)
+    {
+        var dto = new ForgotPasswordRequestDto(request.Email);
+        await _authService.ForgotPasswordAsync(dto, ct);
+        return Ok(ApiResponse.SuccessResponse(Messages.Auth.PasswordResetOtpSent));
+    }
+
+    /// <summary>
+    /// Reset Password - Step 2: Verify OTP and set new password
+    /// </summary>
+    [HttpPost("reset-password")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse>> ResetPassword(
+        [FromBody] ResetPasswordRequest request,
+        CancellationToken ct)
+    {
+        var dto = new ResetPasswordRequestDto(
+            request.Email,
+            request.OtpCode,
+            request.NewPassword
+        );
+        
+        await _authService.ResetPasswordAsync(dto, ct);
+        return Ok(ApiResponse.SuccessResponse(Messages.Auth.PasswordResetSuccess));
     }
 }

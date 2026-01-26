@@ -120,6 +120,10 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
             entity.Property(e => e.OtpCode)
                 .IsRequired()
                 .HasMaxLength(6);
+            entity.Property(e => e.OtpType)
+                .IsRequired()
+                .HasMaxLength(50)
+                .HasDefaultValue("Registration");
             entity.Property(e => e.ExpiredAt).IsRequired();
             entity.Property(e => e.IsUsed).HasDefaultValue(false);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getutcdate())");
@@ -132,6 +136,10 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
 
             entity.HasIndex(e => e.ExpiredAt)
                 .HasDatabaseName("IX_EmailOtps_ExpiredAt")
+                .HasFilter("[IsUsed] = 0");
+            
+            entity.HasIndex(e => new { e.OtpType, e.Email, e.IsUsed })
+                .HasDatabaseName("IX_EmailOtps_OtpType_Email_IsUsed")
                 .HasFilter("[IsUsed] = 0");
         });
 
