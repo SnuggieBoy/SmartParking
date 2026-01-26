@@ -255,7 +255,10 @@ public sealed class BookingService : IBookingService
 
         var now = DateTime.UtcNow;
         var actualEnd = now;
-        var actualStart = booking.StartTime;
+        
+        // Use CheckInTime if available, otherwise fallback to StartTime
+        var actualStart = booking.CheckInTime ?? booking.StartTime;
+        
         if (actualEnd < actualStart)
         {
             actualEnd = actualStart;
