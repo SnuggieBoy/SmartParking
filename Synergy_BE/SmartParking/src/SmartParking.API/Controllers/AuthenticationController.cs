@@ -124,26 +124,6 @@ public sealed class AuthenticationController : BaseApiController
         return Ok(ApiResponse.SuccessResponse(Messages.Auth.LogoutSuccess));
     }
 
-    [Authorize]
-    [HttpPost("change-password")]
-    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<ApiResponse>> ChangePassword(
-        [FromBody] ChangePasswordRequest request,
-        CancellationToken ct)
-    {
-        var userId = GetUserIdFromToken();
-
-        var dto = new ChangePasswordRequestDto(
-            request.OldPassword,
-            request.NewPassword
-        );
-
-        await _authService.ChangePasswordAsync(userId, dto, ct);
-        return Ok(ApiResponse.SuccessResponse(Messages.Auth.PasswordChangedSuccess));
-    }
-
     /// <summary>
     /// Forgot Password - Step 1: Send OTP to email for password reset
     /// </summary>

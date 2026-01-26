@@ -367,47 +367,6 @@ public sealed class AuthenticationService : IAuthenticationService
         await _tokenRepository.RevokeByUserIdAsync(userId, ct);
     }
 
-    public async Task ChangePasswordAsync(Guid userId, ChangePasswordRequestDto request, CancellationToken ct = default)
-    {
-        // Validate new password is different from old password
-        if (request.OldPassword == request.NewPassword)
-        {
-            throw new BadRequestException(Messages.Auth.NewPasswordSameAsOld);
-        }
-
-        // Get user and verify exists
-        var user = await _userRepository.GetByIdAsync(userId, ct);
-        if (user == null)
-        {
-            throw new NotFoundException(Messages.Auth.UserNotFound);
-        }
-
-        // Get user auth for local provider
-        var userAuth = await _userAuthRepository.GetByProviderUserIdAsync(
-            AuthConstants.LocalProvider, 
-            user.Email, 
-            ct);
-
-        // Check if user has local auth (not Google-only user)
-        if (userAuth == null || userAuth.PasswordHash == null)
-        {
-            throw new BadRequestException(Messages.Auth.CannotChangeGooglePassword);
-        }
-
-        // Verify old password
-        if (!_passwordHasher.VerifyPassword(request.OldPassword, userAuth.PasswordHash))
-        {
-            throw new UnauthorizedException(Messages.Auth.OldPasswordIncorrect);
-        }
-
-        // Hash and update new password
-        userAuth.PasswordHash = _passwordHasher.HashPassword(request.NewPassword);
-        await _userAuthRepository.UpdateAsync(userAuth, ct);
-
-        // Revoke all existing tokens (force re-login for security)
-        await _tokenRepository.RevokeByUserIdAsync(userId, ct);
-    }
-
     #region Password Reset with OTP
 
     public async Task ForgotPasswordAsync(ForgotPasswordRequestDto request, CancellationToken ct = default)
