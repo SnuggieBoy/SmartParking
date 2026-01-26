@@ -49,7 +49,7 @@ public sealed class BookingService : IBookingService
     public async Task<BookingDto> CreateAsync(CreateBookingDto request, Guid userId, CancellationToken ct = default)
     {
         // Validate parking lot exists and is active
-        var parkingLot = await _parkingLotRepository.GetByIdAsync(request.ParkingLotId, ct);
+        var parkingLot = await _parkingLotRepository.GetByIdAsync(request.ParkingLotId, includeDeleted: false, ct);
         if (parkingLot == null || parkingLot.Status != "Active")
         {
             throw new NotFoundException(Messages.ParkingLot.NotFound);
@@ -84,7 +84,7 @@ public sealed class BookingService : IBookingService
 
         // Calculate total amount
         var duration = request.EndTime - request.StartTime;
-        var totalAmount = CalculateAmount(duration, parkingLot.PricePerHour ?? 0);
+        var totalAmount = CalculateAmount(duration, parkingLot.PricePerHour);
 
         var booking = new Booking
         {
@@ -132,9 +132,9 @@ public sealed class BookingService : IBookingService
         }
 
         // Recalculate amount
-        var parkingLot = await _parkingLotRepository.GetByIdAsync(booking.ParkingLotId, ct);
+        var parkingLot = await _parkingLotRepository.GetByIdAsync(booking.ParkingLotId, includeDeleted: false, ct);
         var duration = request.EndTime - request.StartTime;
-        var totalAmount = CalculateAmount(duration, parkingLot!.PricePerHour ?? 0);
+        var totalAmount = CalculateAmount(duration, parkingLot!.PricePerHour);
 
         booking.StartTime = request.StartTime;
         booking.EndTime = request.EndTime;
@@ -237,7 +237,7 @@ public sealed class BookingService : IBookingService
             throw new BadRequestException(Messages.Booking.InvalidStatusForCheckOut);
         }
 
-        var parkingLot = await _parkingLotRepository.GetByIdAsync(booking.ParkingLotId, ct);
+        var parkingLot = await _parkingLotRepository.GetByIdAsync(booking.ParkingLotId, includeDeleted: false, ct);
         if (parkingLot == null)
         {
             throw new NotFoundException(Messages.ParkingLot.NotFound);
@@ -252,7 +252,7 @@ public sealed class BookingService : IBookingService
         }
 
         var duration = actualEnd - actualStart;
-        var totalAmount = CalculateAmount(duration, parkingLot.PricePerHour ?? 0);
+        var totalAmount = CalculateAmount(duration, parkingLot.PricePerHour);
 
         booking.TotalAmount = totalAmount;
         booking.CheckOutTime = now;
@@ -284,7 +284,7 @@ public sealed class BookingService : IBookingService
         if (pageSize <= 0) pageSize = 10;
         if (pageSize > 100) pageSize = 100;
 
-        var parkingLot = await _parkingLotRepository.GetByIdAsync(parkingLotId, ct);
+        var parkingLot = await _parkingLotRepository.GetByIdAsync(parkingLotId, includeDeleted: false, ct);
         if (parkingLot == null)
         {
             throw new NotFoundException(Messages.ParkingLot.NotFound);

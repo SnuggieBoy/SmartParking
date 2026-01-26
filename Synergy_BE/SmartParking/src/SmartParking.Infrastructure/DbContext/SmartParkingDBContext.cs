@@ -148,21 +148,54 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
             entity.HasKey(e => e.ParkingLotId).HasName("PK__ParkingL__6F271E8943112B49");
 
             entity.Property(e => e.ParkingLotId).HasDefaultValueSql("(newid())");
-            entity.Property(e => e.Address).HasMaxLength(255);
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
-            entity.Property(e => e.CurrentOccupancy).HasDefaultValue(0);
-            entity.Property(e => e.Name).HasMaxLength(100);
-            entity.Property(e => e.PricePerHour).HasColumnType("decimal(10, 2)");
+            entity.Property(e => e.Name)
+                .IsRequired()
+                .HasMaxLength(100);
+            entity.Property(e => e.Address)
+                .IsRequired()
+                .HasMaxLength(255);
+            entity.Property(e => e.TotalCapacity).IsRequired();
+            entity.Property(e => e.CurrentOccupancy)
+                .HasDefaultValue(0);
+            entity.Property(e => e.PricePerHour)
+                .HasColumnType("decimal(10, 2)")
+                .IsRequired();
+            entity.Property(e => e.Status)
+                .IsRequired()
+                .HasMaxLength(20)
+                .HasDefaultValue("Active");
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true);
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getutcdate())");
+            entity.Property(e => e.UpdatedAt);
+            entity.Property(e => e.IsDeleted)
+                .HasDefaultValue(false);
             entity.Property(e => e.RowVersion)
                 .IsRequired()
                 .IsRowVersion()
                 .IsConcurrencyToken();
-            entity.Property(e => e.Status).HasMaxLength(20);
 
+            // Indexes
+            entity.HasIndex(e => e.IsDeleted)
+                .HasDatabaseName("IX_ParkingLots_IsDeleted")
+                .HasFilter("[IsDeleted] = 0");
+                
+            entity.HasIndex(e => e.IsActive)
+                .HasDatabaseName("IX_ParkingLots_IsActive");
+                
+            entity.HasIndex(e => new { e.OwnerId, e.IsDeleted })
+                .HasDatabaseName("IX_ParkingLots_OwnerId_IsDeleted")
+                .HasFilter("[IsDeleted] = 0");
+
+            // Relationships
             entity.HasOne(d => d.Owner).WithMany(p => p.ParkingLots)
                 .HasForeignKey(d => d.OwnerId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__ParkingLo__Owner__6477ECF3");
+                
+            // Global query filter for soft delete
+            entity.HasQueryFilter(e => !e.IsDeleted);
         });
 
         modelBuilder.Entity<PaymentLog>(entity =>

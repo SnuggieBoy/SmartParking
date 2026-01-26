@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SmartParking.Application.Common.Models;
 using SmartParking.Application.Interfaces.Repositories;
 using SmartParking.Domain.Entities;
 using SmartParking.Infrastructure.Data;
@@ -14,36 +15,82 @@ public sealed class ParkingLotRepository : IParkingLotRepository
         _context = context;
     }
 
-    public async Task<ParkingLot?> GetByIdAsync(Guid parkingLotId, CancellationToken ct = default)
+    public async Task<ParkingLot?> GetByIdAsync(Guid parkingLotId, bool includeDeleted = false, CancellationToken ct = default)
     {
-        return await _context.ParkingLots
+        var query = _context.ParkingLots
             .Include(p => p.Owner)
-            .AsNoTracking()
-            .FirstOrDefaultAsync(p => p.ParkingLotId == parkingLotId, ct);
+            .ThenInclude(o => o.Role)
+            .AsNoTracking();
+
+        if (!includeDeleted)
+        {
+            query = query.Where(p => !p.IsDeleted);
+        }
+
+        return await query.FirstOrDefaultAsync(p => p.ParkingLotId == parkingLotId, ct);
     }
 
-    public async Task<IEnumerable<ParkingLot>> GetAllAsync(bool activeOnly = true, CancellationToken ct = default)
+    public async Task<PagedResult<ParkingLot>> GetAllAsync(
+        string? searchTerm,
+        bool? isActive,
+        string? status,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
     {
-        var query = _context.ParkingLots.AsQueryable();
+        var query = _context.ParkingLots
+            .Include(p => p.Owner)
+            .ThenInclude(o => o.Role)
+            .Where(p => !p.IsDeleted) // Soft delete filter
+            .AsQueryable();
 
-        if (activeOnly)
+        // Search by name or address
+        if (!string.IsNullOrWhiteSpace(searchTerm))
         {
-            query = query.Where(p => p.Status == "Active");
+            query = query.Where(p => 
+                p.Name.Contains(searchTerm) || 
+                p.Address.Contains(searchTerm));
+        }
+
+        // Filter by IsActive
+        if (isActive.HasValue)
+        {
+            query = query.Where(p => p.IsActive == isActive.Value);
+        }
+
+        // Filter by Status
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            query = query.Where(p => p.Status == status);
+        }
+
+        // Get total count
+        var totalCount = await query.CountAsync(ct);
+
+        // Apply pagination and sorting
+        var items = await query
+            .OrderByDescending(p => p.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        return new PagedResult<ParkingLot>(items, page, pageSize, totalCount);
+    }
+
+    public async Task<IEnumerable<ParkingLot>> GetByOwnerIdAsync(Guid ownerId, bool includeDeleted = false, CancellationToken ct = default)
+    {
+        var query = _context.ParkingLots
+            .Where(p => p.OwnerId == ownerId);
+
+        if (!includeDeleted)
+        {
+            query = query.Where(p => !p.IsDeleted);
         }
 
         return await query
-            .Include(p => p.Owner)
             .AsNoTracking()
-            .OrderBy(p => p.Name)
-            .ToListAsync(ct);
-    }
-
-    public async Task<IEnumerable<ParkingLot>> GetByOwnerIdAsync(Guid ownerId, CancellationToken ct = default)
-    {
-        return await _context.ParkingLots
-            .Where(p => p.OwnerId == ownerId)
-            .AsNoTracking()
-            .OrderBy(p => p.Name)
+            .OrderByDescending(p => p.CreatedAt)
             .ToListAsync(ct);
     }
 
@@ -56,16 +103,23 @@ public sealed class ParkingLotRepository : IParkingLotRepository
 
     public async Task UpdateAsync(ParkingLot parkingLot, CancellationToken ct = default)
     {
+        parkingLot.UpdatedAt = DateTime.UtcNow;
         _context.ParkingLots.Update(parkingLot);
         await _context.SaveChangesAsync(ct);
     }
 
-    public async Task DeleteAsync(Guid parkingLotId, CancellationToken ct = default)
+    public async Task SoftDeleteAsync(Guid parkingLotId, Guid deletedBy, CancellationToken ct = default)
     {
-        var parkingLot = await _context.ParkingLots.FindAsync(new object[] { parkingLotId }, ct);
+        var parkingLot = await _context.ParkingLots
+            .FirstOrDefaultAsync(p => p.ParkingLotId == parkingLotId && !p.IsDeleted, ct);
+            
         if (parkingLot != null)
         {
-            _context.ParkingLots.Remove(parkingLot);
+            parkingLot.IsDeleted = true;
+            parkingLot.DeletedAt = DateTime.UtcNow;
+            parkingLot.DeletedBy = deletedBy;
+            parkingLot.IsActive = false; // Also mark as inactive
+            
             await _context.SaveChangesAsync(ct);
         }
     }
@@ -74,20 +128,29 @@ public sealed class ParkingLotRepository : IParkingLotRepository
     {
         var parkingLot = await _context.ParkingLots
             .AsNoTracking()
-            .FirstOrDefaultAsync(p => p.ParkingLotId == parkingLotId, ct);
+            .FirstOrDefaultAsync(p => p.ParkingLotId == parkingLotId && !p.IsDeleted, ct);
 
-        return parkingLot != null && parkingLot.CurrentOccupancy < parkingLot.TotalCapacity;
+        return parkingLot != null && 
+               parkingLot.IsActive && 
+               parkingLot.CurrentOccupancy < parkingLot.TotalCapacity;
     }
 
     public async Task UpdateOccupancyAsync(Guid parkingLotId, int change, CancellationToken ct = default)
     {
-        var parkingLot = await _context.ParkingLots.FindAsync(new object[] { parkingLotId }, ct);
+        var parkingLot = await _context.ParkingLots
+            .FirstOrDefaultAsync(p => p.ParkingLotId == parkingLotId && !p.IsDeleted, ct);
+            
         if (parkingLot != null)
         {
             parkingLot.CurrentOccupancy += change;
-            if (parkingLot.CurrentOccupancy < 0) parkingLot.CurrentOccupancy = 0;
-            if (parkingLot.CurrentOccupancy > parkingLot.TotalCapacity) parkingLot.CurrentOccupancy = parkingLot.TotalCapacity;
             
+            // Ensure within valid range
+            if (parkingLot.CurrentOccupancy < 0) 
+                parkingLot.CurrentOccupancy = 0;
+            if (parkingLot.CurrentOccupancy > parkingLot.TotalCapacity) 
+                parkingLot.CurrentOccupancy = parkingLot.TotalCapacity;
+            
+            parkingLot.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync(ct);
         }
     }

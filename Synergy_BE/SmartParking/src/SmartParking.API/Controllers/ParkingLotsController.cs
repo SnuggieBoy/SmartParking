@@ -28,17 +28,22 @@ public sealed class ParkingLotsController : BaseApiController
     }
 
     /// <summary>
-    /// PUBLIC ENDPOINT: Anyone can view available parking lots.
+    /// PUBLIC ENDPOINT: Anyone can view available parking lots (paginated, filterable)
     /// </summary>
     [AllowAnonymous]
     [HttpGet]
-    [ProducesResponseType(typeof(ApiResponse<IEnumerable<ParkingLotDto>>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<ApiResponse<IEnumerable<ParkingLotDto>>>> GetAll(
-        [FromQuery] bool activeOnly = true,
+    [ProducesResponseType(typeof(ApiResponse<PagedResult<ParkingLotResponseDto>>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<PagedResult<ParkingLotResponseDto>>>> GetAll(
+        [FromQuery] string? search,
+        [FromQuery] bool? isActive,
+        [FromQuery] string? status,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
         CancellationToken ct = default)
     {
-        var parkingLots = await _parkingLotService.GetAllAsync(activeOnly, ct);
-        return Ok(ApiResponse<IEnumerable<ParkingLotDto>>.SuccessResponse(parkingLots, "Parking lots retrieved successfully"));
+        var filter = new ParkingLotFilterDto(search, isActive, status, null, page, pageSize);
+        var result = await _parkingLotService.GetAllAsync(filter, ct);
+        return Ok(ApiResponse<PagedResult<ParkingLotResponseDto>>.SuccessResponse(result, "Parking lots retrieved successfully"));
     }
 
     /// <summary>
@@ -46,25 +51,25 @@ public sealed class ParkingLotsController : BaseApiController
     /// </summary>
     [AllowAnonymous]
     [HttpGet("{id:guid}")]
-    [ProducesResponseType(typeof(ApiResponse<ParkingLotDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<ParkingLotDto>), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ApiResponse<ParkingLotDto>>> GetById(Guid id, CancellationToken ct = default)
+    [ProducesResponseType(typeof(ApiResponse<ParkingLotResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<ParkingLotResponseDto>>> GetById(Guid id, CancellationToken ct = default)
     {
         var parkingLot = await _parkingLotService.GetByIdAsync(id, ct);
-        return Ok(ApiResponse<ParkingLotDto>.SuccessResponse(parkingLot, "Parking lot retrieved successfully"));
+        return Ok(ApiResponse<ParkingLotResponseDto>.SuccessResponse(parkingLot, "Parking lot retrieved successfully"));
     }
 
     /// <summary>
     /// SECURITY: Owner OR Admin can view their parking lots.
     /// </summary>
     [Authorize(Policy = AuthorizationPolicies.OwnerOrAdmin)]
-    [HttpGet("my-parking-lots")]
-    [ProducesResponseType(typeof(ApiResponse<IEnumerable<ParkingLotDto>>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<ApiResponse<IEnumerable<ParkingLotDto>>>> GetMyParkingLots(CancellationToken ct = default)
+    [HttpGet("my")]
+    [ProducesResponseType(typeof(ApiResponse<IEnumerable<ParkingLotResponseDto>>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<IEnumerable<ParkingLotResponseDto>>>> GetMyParkingLots(CancellationToken ct = default)
     {
         var userId = GetUserIdFromToken();
         var parkingLots = await _parkingLotService.GetMyParkingLotsAsync(userId, ct);
-        return Ok(ApiResponse<IEnumerable<ParkingLotDto>>.SuccessResponse(parkingLots, "My parking lots retrieved successfully"));
+        return Ok(ApiResponse<IEnumerable<ParkingLotResponseDto>>.SuccessResponse(parkingLots, "My parking lots retrieved successfully"));
     }
 
     /// <summary>
@@ -72,9 +77,9 @@ public sealed class ParkingLotsController : BaseApiController
     /// </summary>
     [Authorize(Policy = AuthorizationPolicies.OwnerOrAdmin)]
     [HttpPost]
-    [ProducesResponseType(typeof(ApiResponse<ParkingLotDto>), StatusCodes.Status201Created)]
-    [ProducesResponseType(typeof(ApiResponse<ParkingLotDto>), StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<ApiResponse<ParkingLotDto>>> Create(
+    [ProducesResponseType(typeof(ApiResponse<ParkingLotResponseDto>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ApiResponse<ParkingLotResponseDto>>> Create(
         [FromBody] CreateParkingLotDto request,
         CancellationToken ct = default)
     {
@@ -83,7 +88,7 @@ public sealed class ParkingLotsController : BaseApiController
         return CreatedAtAction(
             nameof(GetById),
             new { id = parkingLot.ParkingLotId },
-            ApiResponse<ParkingLotDto>.SuccessResponse(parkingLot, Messages.ParkingLot.CreateSuccess)
+            ApiResponse<ParkingLotResponseDto>.SuccessResponse(parkingLot, Messages.ParkingLot.CreateSuccess)
         );
     }
 
@@ -93,9 +98,10 @@ public sealed class ParkingLotsController : BaseApiController
     /// </summary>
     [Authorize(Policy = AuthorizationPolicies.OwnerOrAdmin)]
     [HttpPut("{id:guid}")]
-    [ProducesResponseType(typeof(ApiResponse<ParkingLotDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<ParkingLotDto>), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ApiResponse<ParkingLotDto>>> Update(
+    [ProducesResponseType(typeof(ApiResponse<ParkingLotResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<ApiResponse<ParkingLotResponseDto>>> Update(
         Guid id,
         [FromBody] UpdateParkingLotDto request,
         CancellationToken ct = default)
@@ -103,7 +109,24 @@ public sealed class ParkingLotsController : BaseApiController
         var userId = GetUserIdFromToken();
         var isAdmin = IsAdmin();
         var parkingLot = await _parkingLotService.UpdateAsync(id, request, userId, isAdmin, ct);
-        return Ok(ApiResponse<ParkingLotDto>.SuccessResponse(parkingLot, Messages.ParkingLot.UpdateSuccess));
+        return Ok(ApiResponse<ParkingLotResponseDto>.SuccessResponse(parkingLot, Messages.ParkingLot.UpdateSuccess));
+    }
+
+    /// <summary>
+    /// SECURITY: Toggle parking lot active status
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.OwnerOrAdmin)]
+    [HttpPatch("{id:guid}/toggle-active")]
+    [ProducesResponseType(typeof(ApiResponse<ParkingLotResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<ParkingLotResponseDto>>> ToggleActive(
+        Guid id,
+        CancellationToken ct = default)
+    {
+        var userId = GetUserIdFromToken();
+        var isAdmin = IsAdmin();
+        var parkingLot = await _parkingLotService.ToggleActiveAsync(id, userId, isAdmin, ct);
+        return Ok(ApiResponse<ParkingLotResponseDto>.SuccessResponse(parkingLot, "Parking lot status updated successfully"));
     }
 
     /// <summary>
