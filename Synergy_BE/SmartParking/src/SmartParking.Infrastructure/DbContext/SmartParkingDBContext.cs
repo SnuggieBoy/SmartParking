@@ -416,8 +416,11 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
                 .HasDefaultValue(false);
 
             // Check constraints for valid coordinates
-            entity.HasCheckConstraint("CK_ParkingLocations_Latitude", "[Latitude] >= -90 AND [Latitude] <= 90");
-            entity.HasCheckConstraint("CK_ParkingLocations_Longitude", "[Longitude] >= -180 AND [Longitude] <= 180");
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_ParkingLocations_Latitude", "[Latitude] >= -90 AND [Latitude] <= 90");
+                t.HasCheckConstraint("CK_ParkingLocations_Longitude", "[Longitude] >= -180 AND [Longitude] <= 180");
+            });
 
             // Indexes
             entity.HasIndex(e => e.IsDeleted)
