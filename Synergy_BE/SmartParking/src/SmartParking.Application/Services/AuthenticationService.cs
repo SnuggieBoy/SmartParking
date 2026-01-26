@@ -16,6 +16,12 @@ public sealed class AuthenticationService : IAuthenticationService
     private readonly IJwtTokenService _jwtService;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IGoogleAuthService _googleAuthService;
+    private readonly IEmailOtpRepository _emailOtpRepository;
+    private readonly IEmailService _emailService;
+    
+    private const int OTP_LENGTH = 6;
+    private const int OTP_EXPIRY_MINUTES = 5;
+    private const int RESEND_OTP_COOLDOWN_SECONDS = 60;
 
     public AuthenticationService(
         IUserRepository userRepository,
@@ -24,7 +30,9 @@ public sealed class AuthenticationService : IAuthenticationService
         IRoleRepository roleRepository,
         IJwtTokenService jwtService,
         IPasswordHasher passwordHasher,
-        IGoogleAuthService googleAuthService)
+        IGoogleAuthService googleAuthService,
+        IEmailOtpRepository emailOtpRepository,
+        IEmailService emailService)
     {
         _userRepository = userRepository;
         _userAuthRepository = userAuthRepository;
@@ -33,6 +41,8 @@ public sealed class AuthenticationService : IAuthenticationService
         _jwtService = jwtService;
         _passwordHasher = passwordHasher;
         _googleAuthService = googleAuthService;
+        _emailOtpRepository = emailOtpRepository;
+        _emailService = emailService;
     }
 
     public async Task<AuthResponseDto> RegisterAsync(RegisterRequestDto request, CancellationToken ct = default)
@@ -78,6 +88,202 @@ public sealed class AuthenticationService : IAuthenticationService
         return await GenerateAuthResponse(user, ct);
     }
 
+    #region OTP-based Registration Flow
+
+    public async Task RegisterRequestOtpAsync(RegisterRequestDto request, CancellationToken ct = default)
+    {
+        // Check if user already exists
+        var existingUser = await _userRepository.GetByEmailAsync(request.Email, ct);
+        if (existingUser != null)
+        {
+            if (existingUser.EmailConfirmed)
+            {
+                throw new BadRequestException(Messages.Auth.EmailAlreadyExists);
+            }
+            else
+            {
+                throw new BadRequestException(Messages.Auth.PendingRegistration);
+            }
+        }
+
+        // Check if there's a recent OTP request (rate limiting)
+        var existingOtp = await _emailOtpRepository.GetLatestUnusedByEmailAsync(request.Email, ct);
+        if (existingOtp != null && existingOtp.CreatedAt.AddSeconds(RESEND_OTP_COOLDOWN_SECONDS) > DateTime.UtcNow)
+        {
+            throw new BadRequestException(Messages.Auth.TooManyOtpRequests);
+        }
+
+        // Invalidate all previous OTPs for this email
+        await _emailOtpRepository.InvalidateAllByEmailAsync(request.Email, ct);
+
+        // Generate secure random OTP
+        var otpCode = GenerateOtpCode();
+
+        // Hash password for temporary storage
+        var hashedPassword = _passwordHasher.HashPassword(request.Password);
+
+        // Create OTP record
+        var emailOtp = new EmailOtp
+        {
+            OtpId = Guid.NewGuid(),
+            Email = request.Email,
+            OtpCode = otpCode,
+            ExpiredAt = DateTime.UtcNow.AddMinutes(OTP_EXPIRY_MINUTES),
+            IsUsed = false,
+            CreatedAt = DateTime.UtcNow,
+            TemporaryPasswordHash = hashedPassword,
+            TemporaryFullName = request.FullName,
+            TemporaryPhone = request.Phone
+        };
+
+        await _emailOtpRepository.CreateAsync(emailOtp, ct);
+
+        // Send OTP email
+        await _emailService.SendOtpEmailAsync(request.Email, otpCode, request.FullName, ct);
+    }
+
+    public async Task<AuthResponseDto> VerifyOtpAndRegisterAsync(VerifyOtpRequestDto request, CancellationToken ct = default)
+    {
+        // Get latest unused OTP for email
+        var emailOtp = await _emailOtpRepository.GetLatestUnusedByEmailAsync(request.Email, ct);
+        
+        if (emailOtp == null)
+        {
+            throw new BadRequestException(Messages.Auth.OtpNotFound);
+        }
+
+        // Check if OTP is expired
+        if (emailOtp.ExpiredAt < DateTime.UtcNow)
+        {
+            throw new BadRequestException(Messages.Auth.OtpExpired);
+        }
+
+        // Verify OTP code
+        if (emailOtp.OtpCode != request.OtpCode)
+        {
+            throw new BadRequestException(Messages.Auth.OtpInvalid);
+        }
+
+        // Check if already used (race condition protection)
+        if (emailOtp.IsUsed)
+        {
+            throw new BadRequestException(Messages.Auth.OtpAlreadyUsed);
+        }
+
+        // Mark OTP as used
+        await _emailOtpRepository.MarkAsUsedAsync(emailOtp.OtpId, ct);
+
+        // Get user role
+        var userRole = await _roleRepository.GetByNameAsync(AuthConstants.Roles.User, ct);
+        if (userRole == null)
+        {
+            throw new NotFoundException(Messages.Auth.RoleNotFound);
+        }
+
+        // Create user account
+        var user = new User
+        {
+            UserId = Guid.NewGuid(),
+            FullName = emailOtp.TemporaryFullName ?? "User",
+            Email = emailOtp.Email,
+            Phone = emailOtp.TemporaryPhone ?? string.Empty,
+            RoleId = userRole.RoleId,
+            IsActive = true,
+            EmailConfirmed = true, // Mark email as confirmed
+            CreatedAt = DateTime.UtcNow
+        };
+
+        user = await _userRepository.CreateAsync(user, ct);
+
+        // Create user auth
+        var userAuth = new UserAuth
+        {
+            AuthId = Guid.NewGuid(),
+            UserId = user.UserId,
+            Provider = AuthConstants.LocalProvider,
+            ProviderUserId = user.Email,
+            PasswordHash = emailOtp.TemporaryPasswordHash,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _userAuthRepository.CreateAsync(userAuth, ct);
+
+        // Send welcome email
+        await _emailService.SendWelcomeEmailAsync(user.Email, user.FullName, ct);
+
+        // Generate auth response
+        user.Role = userRole;
+        return await GenerateAuthResponse(user, ct);
+    }
+
+    public async Task ResendOtpAsync(ResendOtpRequestDto request, CancellationToken ct = default)
+    {
+        // Check if user already exists with confirmed email
+        var existingUser = await _userRepository.GetByEmailAsync(request.Email, ct);
+        if (existingUser != null && existingUser.EmailConfirmed)
+        {
+            throw new BadRequestException(Messages.Auth.EmailAlreadyExists);
+        }
+
+        // Check for recent OTP request (rate limiting)
+        var latestOtp = await _emailOtpRepository.GetLatestUnusedByEmailAsync(request.Email, ct);
+        if (latestOtp != null && latestOtp.CreatedAt.AddSeconds(RESEND_OTP_COOLDOWN_SECONDS) > DateTime.UtcNow)
+        {
+            throw new BadRequestException(Messages.Auth.TooManyOtpRequests);
+        }
+
+        // Check if there's any OTP record for this email
+        if (latestOtp == null)
+        {
+            throw new BadRequestException(Messages.Auth.OtpNotFound);
+        }
+
+        // Invalidate all previous OTPs
+        await _emailOtpRepository.InvalidateAllByEmailAsync(request.Email, ct);
+
+        // Generate new OTP
+        var otpCode = GenerateOtpCode();
+
+        // Create new OTP record (reuse stored data from previous OTP)
+        var emailOtp = new EmailOtp
+        {
+            OtpId = Guid.NewGuid(),
+            Email = request.Email,
+            OtpCode = otpCode,
+            ExpiredAt = DateTime.UtcNow.AddMinutes(OTP_EXPIRY_MINUTES),
+            IsUsed = false,
+            CreatedAt = DateTime.UtcNow,
+            TemporaryPasswordHash = latestOtp.TemporaryPasswordHash,
+            TemporaryFullName = latestOtp.TemporaryFullName,
+            TemporaryPhone = latestOtp.TemporaryPhone
+        };
+
+        await _emailOtpRepository.CreateAsync(emailOtp, ct);
+
+        // Send new OTP email
+        await _emailService.SendOtpEmailAsync(
+            request.Email, 
+            otpCode, 
+            latestOtp.TemporaryFullName ?? "User", 
+            ct);
+    }
+
+    /// <summary>
+    /// Generates a cryptographically secure random 6-digit OTP code
+    /// </summary>
+    private static string GenerateOtpCode()
+    {
+        using var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
+        var bytes = new byte[4];
+        rng.GetBytes(bytes);
+        var randomNumber = BitConverter.ToUInt32(bytes, 0);
+        // Generate 6-digit number (100000 to 999999)
+        var otpCode = (randomNumber % 900000 + 100000).ToString();
+        return otpCode;
+    }
+
+    #endregion
+
     public async Task<AuthResponseDto> LoginAsync(LoginRequestDto request, CancellationToken ct = default)
     {
         var userAuth = await _userAuthRepository.GetByProviderUserIdAsync(AuthConstants.LocalProvider, request.Email, ct);
@@ -95,6 +301,12 @@ public sealed class AuthenticationService : IAuthenticationService
         if (user?.IsActive != true)
         {
             throw new UnauthorizedException(Messages.Auth.AccountInactive);
+        }
+
+        // Check if email is confirmed (for local auth only)
+        if (!user.EmailConfirmed)
+        {
+            throw new UnauthorizedException(Messages.Auth.EmailNotVerified);
         }
 
         return await GenerateAuthResponse(user, ct);

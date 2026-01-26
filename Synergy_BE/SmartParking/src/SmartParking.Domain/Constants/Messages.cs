@@ -19,6 +19,18 @@ public static class Messages
         public const string OldPasswordIncorrect = "Old password is incorrect";
         public const string NewPasswordSameAsOld = "New password must be different from old password";
         public const string CannotChangeGooglePassword = "Cannot change password for Google account";
+        
+        // OTP Verification Messages
+        public const string OtpSentSuccess = "OTP has been sent to your email. Please check your inbox.";
+        public const string OtpVerifiedSuccess = "Email verified successfully. Your account has been created.";
+        public const string OtpInvalid = "Invalid OTP code";
+        public const string OtpExpired = "OTP code has expired. Please request a new one.";
+        public const string OtpAlreadyUsed = "This OTP has already been used";
+        public const string OtpNotFound = "No OTP found for this email";
+        public const string OtpResentSuccess = "A new OTP has been sent to your email";
+        public const string EmailNotVerified = "Please verify your email before logging in";
+        public const string TooManyOtpRequests = "Too many OTP requests. Please try again in 60 seconds";
+        public const string PendingRegistration = "Registration pending. Please verify your email first.";
     }
 
     public static class ParkingLot

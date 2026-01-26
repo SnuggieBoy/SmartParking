@@ -31,6 +31,8 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
     }
 
     public virtual DbSet<Booking> Bookings { get; set; }
+    
+    public virtual DbSet<EmailOtp> EmailOtps { get; set; }
 
     public virtual DbSet<ParkingLot> ParkingLots { get; set; }
 
@@ -105,6 +107,32 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
                 .HasForeignKey(d => d.VehicleId)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("FK__Bookings__VehicleId__ABCD1234");
+        });
+
+        modelBuilder.Entity<EmailOtp>(entity =>
+        {
+            entity.HasKey(e => e.OtpId).HasName("PK__EmailOtp__OtpId");
+
+            entity.Property(e => e.OtpId).HasDefaultValueSql("(newid())");
+            entity.Property(e => e.Email)
+                .IsRequired()
+                .HasMaxLength(255);
+            entity.Property(e => e.OtpCode)
+                .IsRequired()
+                .HasMaxLength(6);
+            entity.Property(e => e.ExpiredAt).IsRequired();
+            entity.Property(e => e.IsUsed).HasDefaultValue(false);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getutcdate())");
+            entity.Property(e => e.TemporaryFullName).HasMaxLength(255);
+            entity.Property(e => e.TemporaryPhone).HasMaxLength(20);
+
+            entity.HasIndex(e => new { e.Email, e.IsUsed })
+                .HasDatabaseName("IX_EmailOtps_Email_IsUsed")
+                .HasFilter("[IsUsed] = 0");
+
+            entity.HasIndex(e => e.ExpiredAt)
+                .HasDatabaseName("IX_EmailOtps_ExpiredAt")
+                .HasFilter("[IsUsed] = 0");
         });
 
         modelBuilder.Entity<ParkingLot>(entity =>
@@ -196,7 +224,11 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
             entity.Property(e => e.Email).HasMaxLength(100);
             entity.Property(e => e.FullName).HasMaxLength(100);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.EmailConfirmed).HasDefaultValue(false);
             entity.Property(e => e.Phone).HasMaxLength(20);
+
+            entity.HasIndex(e => e.EmailConfirmed)
+                .HasDatabaseName("IX_Users_EmailConfirmed");
 
             entity.HasOne(d => d.Role).WithMany(p => p.Users)
                 .HasForeignKey(d => d.RoleId)

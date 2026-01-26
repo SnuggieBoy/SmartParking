@@ -20,9 +20,65 @@ public sealed class AuthenticationController : BaseApiController
         _authService = authService;
     }
 
+    /// <summary>
+    /// STEP 1: Request registration - Sends OTP to email
+    /// </summary>
+    [HttpPost("register-request")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ApiResponse>> RegisterRequest(
+        [FromBody] RegisterRequest request,
+        CancellationToken ct)
+    {
+        var dto = new RegisterRequestDto(
+            request.FullName,
+            request.Email,
+            request.Phone,
+            request.Password
+        );
+
+        await _authService.RegisterRequestOtpAsync(dto, ct);
+        return Ok(ApiResponse.SuccessResponse(Messages.Auth.OtpSentSuccess));
+    }
+
+    /// <summary>
+    /// STEP 2: Verify OTP and complete registration
+    /// </summary>
+    [HttpPost("verify-otp")]
+    [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ApiResponse<AuthResponseDto>>> VerifyOtp(
+        [FromBody] VerifyOtpRequest request,
+        CancellationToken ct)
+    {
+        var dto = new VerifyOtpRequestDto(request.Email, request.OtpCode);
+        var response = await _authService.VerifyOtpAndRegisterAsync(dto, ct);
+        return Ok(ApiResponse<AuthResponseDto>.SuccessResponse(response, Messages.Auth.OtpVerifiedSuccess));
+    }
+
+    /// <summary>
+    /// STEP 2.5: Resend OTP if expired or not received
+    /// </summary>
+    [HttpPost("resend-otp")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status429TooManyRequests)]
+    public async Task<ActionResult<ApiResponse>> ResendOtp(
+        [FromBody] ResendOtpRequest request,
+        CancellationToken ct)
+    {
+        var dto = new ResendOtpRequestDto(request.Email);
+        await _authService.ResendOtpAsync(dto, ct);
+        return Ok(ApiResponse.SuccessResponse(Messages.Auth.OtpResentSuccess));
+    }
+
+    /// <summary>
+    /// [DEPRECATED] Legacy registration without OTP - Use register-request + verify-otp instead
+    /// </summary>
     [HttpPost("register")]
     [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status400BadRequest)]
+    [ApiExplorerSettings(IgnoreApi = true)] // Hide from Swagger
     public async Task<ActionResult<ApiResponse<AuthResponseDto>>> Register(
         [FromBody] RegisterRequest request,
         CancellationToken ct)

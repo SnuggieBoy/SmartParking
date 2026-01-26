@@ -25,6 +25,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserAuthRepository, UserAuthRepository>();
         services.AddScoped<IUserTokenRepository, UserTokenRepository>();
         services.AddScoped<IRoleRepository, RoleRepository>();
+        services.AddScoped<IEmailOtpRepository, EmailOtpRepository>();
         services.AddScoped<IPaymentRepository, PaymentRepository>();
         services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<IParkingLotRepository, ParkingLotRepository>();
@@ -33,6 +34,7 @@ public static class ServiceCollectionExtensions
 
         // Services
         services.AddScoped<IVnPayService, VnPayService>();
+        services.AddScoped<IEmailService, EmailService>();
 
         return services;
     }
