@@ -35,7 +35,7 @@ public sealed class VnPayService : IVnPayService
         Guid userId,
         CancellationToken ct = default)
     {
-        var booking = await _bookingRepository.GetByIdAsync(request.BookingId, ct);
+        var booking = await _bookingRepository.GetByIdAsync(request.BookingId, includeDeleted: false, ct);
         if (booking == null)
         {
             throw new NotFoundException(Messages.Booking.NotFound);
@@ -182,7 +182,7 @@ public sealed class VnPayService : IVnPayService
         // Step 6: Update booking status if payment successful
         if (callback.vnp_ResponseCode == PaymentConstants.VnPayResponseCodes.Success)
         {
-            var booking = await _bookingRepository.GetByIdAsync(payment.BookingId, ct);
+            var booking = await _bookingRepository.GetByIdAsync(payment.BookingId, includeDeleted: false, ct);
             if (booking != null && booking.Status == nameof(BookingStatus.Pending))
             {
                 booking.Status = nameof(BookingStatus.Confirmed);

@@ -24,7 +24,7 @@ public sealed class PaymentService : IPaymentService
         bool isAdmin,
         CancellationToken ct = default)
     {
-        var booking = await _bookingRepository.GetByIdAsync(bookingId, ct);
+        var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
         if (booking == null)
         {
             throw new NotFoundException(Messages.Booking.NotFound);

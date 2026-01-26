@@ -26,12 +26,16 @@ public sealed class BookingsController : BaseApiController
     }
 
     [HttpGet("my-bookings")]
-    [ProducesResponseType(typeof(ApiResponse<IEnumerable<BookingListDto>>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<ApiResponse<IEnumerable<BookingListDto>>>> GetMyBookings(CancellationToken ct = default)
+    [ProducesResponseType(typeof(ApiResponse<PagedResult<BookingListDto>>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<PagedResult<BookingListDto>>>> GetMyBookings(
+        [FromQuery] string? status,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken ct = default)
     {
         var userId = GetUserIdFromToken();
-        var bookings = await _bookingService.GetMyBookingsAsync(userId, ct);
-        return Ok(ApiResponse<IEnumerable<BookingListDto>>.SuccessResponse(bookings, "Bookings retrieved successfully"));
+        var result = await _bookingService.GetMyBookingsAsync(userId, status, page, pageSize, ct);
+        return Ok(ApiResponse<PagedResult<BookingListDto>>.SuccessResponse(result, "Bookings retrieved successfully"));
     }
 
     [HttpGet("{id:guid}")]

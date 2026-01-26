@@ -28,7 +28,7 @@ public sealed class BookingService : IBookingService
 
     public async Task<BookingDto> GetByIdAsync(Guid bookingId, Guid userId, bool isAdmin, CancellationToken ct = default)
     {
-        var booking = await _bookingRepository.GetByIdAsync(bookingId, ct);
+        var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
         if (booking == null)
         {
             throw new NotFoundException(Messages.Booking.NotFound);
@@ -40,10 +40,16 @@ public sealed class BookingService : IBookingService
         return MapToDto(booking);
     }
 
-    public async Task<IEnumerable<BookingListDto>> GetMyBookingsAsync(Guid userId, CancellationToken ct = default)
+    public async Task<PagedResult<BookingListDto>> GetMyBookingsAsync(
+        Guid userId,
+        string? status,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
     {
-        var bookings = await _bookingRepository.GetByUserIdAsync(userId, ct);
-        return bookings.Select(MapToListDto);
+        var pagedResult = await _bookingRepository.GetByUserIdAsync(userId, status, page, pageSize, ct);
+        var dtos = pagedResult.Items.Select(MapToListDto).ToList();
+        return new PagedResult<BookingListDto>(dtos, pagedResult.Page, pagedResult.PageSize, pagedResult.TotalCount);
     }
 
     public async Task<BookingDto> CreateAsync(CreateBookingDto request, Guid userId, CancellationToken ct = default)
@@ -86,17 +92,21 @@ public sealed class BookingService : IBookingService
         var duration = request.EndTime - request.StartTime;
         var totalAmount = CalculateAmount(duration, parkingLot.PricePerHour);
 
+        var now = DateTime.UtcNow;
         var booking = new Booking
         {
             BookingId = Guid.NewGuid(),
             UserId = userId,
             ParkingLotId = request.ParkingLotId,
             VehicleId = request.VehicleId,
+            BookingTime = now,
             StartTime = request.StartTime,
             EndTime = request.EndTime,
             Status = nameof(BookingStatus.Pending),
             TotalAmount = totalAmount,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = now,
+            CreatedBy = userId,
+            IsDeleted = false
         };
 
         var created = await _bookingRepository.CreateAsync(booking, ct);
@@ -105,13 +115,13 @@ public sealed class BookingService : IBookingService
         await _parkingLotRepository.UpdateOccupancyAsync(request.ParkingLotId, 1, ct);
 
         // Reload with navigation properties
-        created = await _bookingRepository.GetByIdAsync(created.BookingId, ct);
+        created = await _bookingRepository.GetByIdAsync(created.BookingId, includeDeleted: false, ct);
         return MapToDto(created!);
     }
 
     public async Task<BookingDto> UpdateAsync(Guid bookingId, UpdateBookingDto request, Guid userId, bool isAdmin, CancellationToken ct = default)
     {
-        var booking = await _bookingRepository.GetByIdAsync(bookingId, ct);
+        var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
         if (booking == null)
         {
             throw new NotFoundException(Messages.Booking.NotFound);
@@ -144,13 +154,13 @@ public sealed class BookingService : IBookingService
         await _bookingRepository.UpdateAsync(booking, ct);
 
         // Reload with navigation properties
-        booking = await _bookingRepository.GetByIdAsync(bookingId, ct);
+        booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
         return MapToDto(booking!);
     }
 
     public async Task CancelAsync(Guid bookingId, Guid userId, bool isAdmin, CancellationToken ct = default)
     {
-        var booking = await _bookingRepository.GetByIdAsync(bookingId, ct);
+        var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
         if (booking == null)
         {
             throw new NotFoundException(Messages.Booking.NotFound);
@@ -184,7 +194,7 @@ public sealed class BookingService : IBookingService
         bool isAdmin,
         CancellationToken ct = default)
     {
-        var booking = await _bookingRepository.GetByIdAsync(bookingId, ct);
+        var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
         if (booking == null)
         {
             throw new NotFoundException(Messages.Booking.NotFound);
@@ -221,7 +231,7 @@ public sealed class BookingService : IBookingService
         bool isAdmin,
         CancellationToken ct = default)
     {
-        var booking = await _bookingRepository.GetByIdAsync(bookingId, ct);
+        var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
         if (booking == null)
         {
             throw new NotFoundException(Messages.Booking.NotFound);
@@ -266,7 +276,7 @@ public sealed class BookingService : IBookingService
 
         return new BookingCheckOutResponseDto(
             booking.BookingId,
-            booking.Status ?? nameof(BookingStatus.Completed),
+            booking.Status,
             now,
             totalAmount
         );
@@ -295,24 +305,23 @@ public sealed class BookingService : IBookingService
             throw new ForbiddenException();
         }
 
-        var skip = (page - 1) * pageSize;
-        var (items, total) = await _bookingRepository.GetByParkingLotIdPagedAsync(parkingLotId, skip, pageSize, ct);
+        var pagedResult = await _bookingRepository.GetByParkingLotIdPagedAsync(parkingLotId, null, page, pageSize, ct);
 
-        var dtos = items
+        var dtos = pagedResult.Items
             .Select(b => new ParkingLotBookingDto(
                 b.BookingId,
                 b.User?.FullName ?? string.Empty,
                 b.Vehicle?.LicensePlate,
-                b.Status ?? nameof(BookingStatus.Pending),
+                b.Status,
                 b.StartTime,
                 b.EndTime,
                 b.CheckInTime,
                 b.CheckOutTime,
-                b.TotalAmount ?? 0
+                b.TotalAmount
             ))
             .ToList();
 
-        return new PagedResult<ParkingLotBookingDto>(dtos, page, pageSize, total);
+        return new PagedResult<ParkingLotBookingDto>(dtos, pagedResult.Page, pagedResult.PageSize, pagedResult.TotalCount);
     }
 
     private static decimal CalculateAmount(TimeSpan duration, decimal pricePerHour)
@@ -333,9 +342,9 @@ public sealed class BookingService : IBookingService
             booking.Vehicle?.LicensePlate,
             booking.StartTime,
             booking.EndTime,
-            booking.Status ?? nameof(BookingStatus.Pending),
-            booking.TotalAmount ?? 0,
-            booking.CreatedAt ?? DateTime.UtcNow
+            booking.Status,
+            booking.TotalAmount,
+            booking.CreatedAt
         );
     }
 
@@ -347,8 +356,10 @@ public sealed class BookingService : IBookingService
             booking.Vehicle?.LicensePlate,
             booking.StartTime,
             booking.EndTime,
-            booking.Status ?? nameof(BookingStatus.Pending),
-            booking.TotalAmount ?? 0
+            booking.Status,
+            booking.TotalAmount,
+            booking.CheckInTime,
+            booking.CheckOutTime
         );
     }
 }
