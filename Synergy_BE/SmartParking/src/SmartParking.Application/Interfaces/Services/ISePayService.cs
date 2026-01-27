@@ -1,0 +1,27 @@
+using SmartParking.Application.DTOs.Payment;
+
+namespace SmartParking.Application.Interfaces.Services;
+
+/// <summary>
+/// Service for SePay payment integration
+/// </summary>
+public interface ISePayService
+{
+    /// <summary>
+    /// Creates SePay payment request and returns QR code + bank transfer info
+    /// </summary>
+    Task<SePayPaymentResponseDto> CreatePaymentAsync(
+        CreateSePayPaymentDto request,
+        Guid userId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Processes SePay webhook callback
+    /// SECURITY: Verifies webhook signature before processing
+    /// </summary>
+    Task<bool> ProcessWebhookAsync(
+        SePayWebhookDto webhook,
+        string signature,
+        string rawPayload,
+        CancellationToken ct = default);
+}

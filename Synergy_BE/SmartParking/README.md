@@ -169,11 +169,33 @@ All endpoints return standardized JSON:
 - Add integration tests
 
 ### For Production
-- Use environment variables for secrets
+- Use environment variables for secrets (see `.env.example`)
 - Enable HTTPS only
 - Set up monitoring (Application Insights)
 - Configure rate limiting
 - Add caching (Redis)
+
+## 💳 Payment Integration
+
+### VNPay (E-wallet / Credit Card)
+- Sandbox testing available
+- Supports multiple payment methods
+
+### SePay (Bank Transfer) - NEW! 🎉
+- QR code generation
+- Real-time webhook notifications
+- Production-ready with environment variable support
+
+**Setup Guide:**
+- Quick Setup: `docs/SEPAY_QUICK_SETUP.md`
+- Environment Variables: `docs/SEPAY_ENVIRONMENT_VARIABLES.md`
+- Production Deployment: `docs/SEPAY_PRODUCTION_DEPLOYMENT.md`
+
+**Required Environment Variables:**
+```bash
+SEPAY_API_KEY=your-api-key
+SEPAY_WEBHOOK_SECRET=your-32-char-secret
+```
 
 ## 📝 License
 
@@ -182,5 +204,5 @@ This project is for educational purposes.
 ---
 
 **Status**: ✅ Production Ready  
-**Version**: 1.0  
-**Last Updated**: January 25, 2026
+**Version**: 2.0 (SePay Refactored)  
+**Last Updated**: January 27, 2026
