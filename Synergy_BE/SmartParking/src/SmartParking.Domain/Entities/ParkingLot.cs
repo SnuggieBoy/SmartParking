@@ -15,6 +15,11 @@ public partial class ParkingLot
 
     public string Address { get; set; } = null!;
 
+    // Geolocation (for maps & navigation)
+    public decimal? Latitude { get; set; }
+
+    public decimal? Longitude { get; set; }
+
     public int TotalCapacity { get; set; }
 
     public int CurrentOccupancy { get; set; }

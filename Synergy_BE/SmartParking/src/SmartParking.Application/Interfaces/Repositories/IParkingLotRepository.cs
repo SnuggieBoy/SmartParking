@@ -19,4 +19,10 @@ public interface IParkingLotRepository
     Task SoftDeleteAsync(Guid parkingLotId, Guid deletedBy, CancellationToken ct = default);
     Task<bool> HasAvailableSlotsAsync(Guid parkingLotId, CancellationToken ct = default);
     Task UpdateOccupancyAsync(Guid parkingLotId, int change, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns all parking lots that have valid coordinates.
+    /// Used for nearby search (distance calculated at service layer).
+    /// </summary>
+    Task<IEnumerable<ParkingLot>> GetAllWithLocationAsync(bool onlyActive = true, CancellationToken ct = default);
 }

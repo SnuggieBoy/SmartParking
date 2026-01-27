@@ -154,4 +154,20 @@ public sealed class ParkingLotRepository : IParkingLotRepository
             await _context.SaveChangesAsync(ct);
         }
     }
+
+    public async Task<IEnumerable<ParkingLot>> GetAllWithLocationAsync(bool onlyActive = true, CancellationToken ct = default)
+    {
+        var query = _context.ParkingLots
+            .AsNoTracking()
+            .Where(p => !p.IsDeleted &&
+                        p.Latitude.HasValue &&
+                        p.Longitude.HasValue);
+
+        if (onlyActive)
+        {
+            query = query.Where(p => p.IsActive);
+        }
+
+        return await query.ToListAsync(ct);
+    }
 }
