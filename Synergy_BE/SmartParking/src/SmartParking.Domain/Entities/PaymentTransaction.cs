@@ -29,6 +29,19 @@ public partial class PaymentTransaction
 
     public string? VnpCardType { get; set; }
 
+    // SePay fields
+    public string? SePayOrderId { get; set; }
+
+    public string? SePayTransactionId { get; set; }
+
+    public string? SePayBankCode { get; set; }
+
+    public string? SePayBankAccount { get; set; }
+
+    public string? SePayTransferContent { get; set; }
+
+    public string? SePayQrCode { get; set; }
+
     // Refund support
     public decimal? RefundAmount { get; set; }
 

@@ -432,9 +432,11 @@
 
 ---
 
-## 💳 **BƯỚC 7: TẠO PAYMENT**
+## 💳 **BƯỚC 7: TẠO PAYMENT (VNPay hoặc SePay)**
 
-### **7.1. Tạo Payment URL**
+### **OPTION A: VNPay (Ví điện tử / Thẻ)**
+
+### **7A.1. Tạo Payment URL (VNPay)**
 
 **Endpoint:** `POST /api/payments/create`
 
@@ -493,6 +495,133 @@
 **✅ Test thành công nếu:**
 - Trả về payment status
 - Nếu payment thành công, `paymentStatus` = "Success" và `paidAt` có giá trị
+
+---
+
+### **OPTION B: SePay (Chuyển khoản ngân hàng)**
+
+### **7B.1. Tạo Payment SePay**
+
+**Endpoint:** `POST /api/payments/sepay/create`
+
+**Headers:**
+- `Authorization: Bearer {userAccessToken}`
+
+**Request Body:**
+```json
+{
+  "bookingId": "{bookingId từ bước 4.1}",
+  "amount": 20000,
+  "description": "Parking fee for booking"
+}
+```
+
+**Expected Response:**
+```json
+{
+  "success": true,
+  "message": "SePay payment created successfully",
+  "data": {
+    "orderId": "SP_20260127_A1B2C3D4",
+    "qrCodeBase64": "base64-string-here",
+    "bankCode": "VCB",
+    "bankAccount": "1234567890",
+    "accountName": "SMART PARKING SYSTEM",
+    "transferContent": "SMARTPARKING SP_20260127_A1B2C3D4",
+    "amount": 20000,
+    "status": "Pending"
+  }
+}
+```
+
+**Action:**
+- Lưu `orderId` để query payment status
+- Hiển thị QR code cho user
+- User chuyển khoản với nội dung: `SMARTPARKING SP_20260127_A1B2C3D4`
+
+---
+
+### **7B.2. User chuyển khoản**
+
+**Cách 1: Quét QR code**
+- Hiển thị `qrCodeBase64` dưới dạng hình ảnh
+- User mở app ngân hàng → quét QR → chuyển khoản
+
+**Cách 2: Chuyển khoản thủ công**
+- Ngân hàng: `VCB`
+- Số tài khoản: `1234567890`
+- Tên tài khoản: `SMART PARKING SYSTEM`
+- Số tiền: `20,000 VND`
+- Nội dung CK: `SMARTPARKING SP_20260127_A1B2C3D4` (CHÍNH XÁC)
+
+---
+
+### **7B.3. SePay gửi Webhook**
+
+**Webhook Endpoint:** `POST /api/payments/sepay/webhook`
+
+**Khi user chuyển khoản thành công:**
+- SePay phát hiện giao dịch
+- Gửi webhook về backend
+- Backend verify signature → update payment status
+- Booking status: `Pending` → `Confirmed`
+
+**Expected Log (backend console):**
+```
+SePay webhook received. OrderId: SP_20260127_A1B2C3D4, Status: success, Verified: True
+Booking confirmed via SePay. BookingId: xxx, OrderId: SP_20260127_A1B2C3D4
+```
+
+---
+
+### **7B.4. Query Payment Status (SePay)**
+
+**Endpoint:** `GET /api/payments/booking/{bookingId}`
+
+**Expected Response (sau khi webhook):**
+```json
+{
+  "success": true,
+  "message": "Payment status retrieved successfully",
+  "data": {
+    "bookingId": "guid-here",
+    "amount": 20000,
+    "status": "Success",
+    "paymentGateway": "SePay",
+    "paidAt": "2026-01-27T20:00:00Z"
+  }
+}
+```
+
+---
+
+### **7B.5. Test Webhook thủ công (cho development)**
+
+**Nếu không có tài khoản SePay thật**, dùng Postman để test webhook:
+
+```bash
+POST https://localhost:7278/api/payments/sepay/webhook
+Headers:
+  X-SePay-Signature: {computed-signature}
+  Content-Type: application/json
+
+Body:
+{
+  "order_id": "SP_20260127_A1B2C3D4",
+  "transaction_id": "SEPAY123456789",
+  "amount": 20000,
+  "status": "success",
+  "bank_code": "VCB",
+  "bank_account": "1234567890",
+  "transfer_content": "SMARTPARKING SP_20260127_A1B2C3D4",
+  "timestamp": 1738008000,
+  "description": "Test payment"
+}
+```
+
+**⚠️ Lưu ý:** 
+- Signature phải tính đúng theo HMAC SHA256 với WebhookSecret
+- Hoặc dùng script SQL `SimulatePaymentSuccess.sql` để simulate
 
 ---
 

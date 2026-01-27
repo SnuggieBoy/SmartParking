@@ -34,6 +34,7 @@ public static class ServiceCollectionExtensions
 
         // Services
         services.AddScoped<IVnPayService, VnPayService>();
+        services.AddScoped<ISePayService, SePayService>();
         services.AddScoped<IEmailService, EmailService>();
 
         return services;

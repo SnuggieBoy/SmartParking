@@ -86,6 +86,8 @@ public sealed class ParkingLotService : IParkingLotService
             TotalCapacity = request.TotalCapacity,
             CurrentOccupancy = 0,
             PricePerHour = request.PricePerHour,
+            Latitude = request.Latitude,
+            Longitude = request.Longitude,
             Status = "Active",
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
@@ -127,6 +129,8 @@ public sealed class ParkingLotService : IParkingLotService
         parkingLot.Address = request.Address.Trim();
         parkingLot.TotalCapacity = request.TotalCapacity;
         parkingLot.PricePerHour = request.PricePerHour;
+        parkingLot.Latitude = request.Latitude;
+        parkingLot.Longitude = request.Longitude;
         parkingLot.IsActive = request.IsActive;
         parkingLot.UpdatedAt = DateTime.UtcNow;
         parkingLot.UpdatedBy = userId;
@@ -170,6 +174,59 @@ public sealed class ParkingLotService : IParkingLotService
         return MapToResponseDto(parkingLot);
     }
 
+    public async Task<IEnumerable<ParkingLotResponseDto>> GetNearbyAsync(
+        decimal latitude,
+        decimal longitude,
+        decimal radiusKm,
+        int maxResults,
+        CancellationToken ct = default)
+    {
+        if (radiusKm <= 0)
+        {
+            throw new BadRequestException("radiusKm must be greater than 0.");
+        }
+
+        if (maxResults <= 0)
+        {
+            throw new BadRequestException("maxResults must be greater than 0.");
+        }
+
+        if (latitude is < -90 or > 90 || longitude is < -180 or > 180)
+        {
+            throw new BadRequestException("Invalid latitude/longitude values.");
+        }
+
+        var lots = await _parkingLotRepository.GetAllWithLocationAsync(onlyActive: true, ct);
+
+        // Calculate distance (Haversine) in memory
+        var originLat = (double)latitude;
+        var originLng = (double)longitude;
+
+        var results = lots
+            .Select(lot =>
+            {
+                var distanceKm = lot.Latitude.HasValue && lot.Longitude.HasValue
+                    ? CalculateDistanceKm(originLat, originLng, (double)lot.Latitude.Value, (double)lot.Longitude.Value)
+                    : double.MaxValue;
+
+                return new
+                {
+                    Lot = lot,
+                    DistanceKm = distanceKm
+                };
+            })
+            .Where(x => x.DistanceKm <= (double)radiusKm)
+            .OrderBy(x => x.DistanceKm)
+            .Take(maxResults)
+            .ToList();
+
+        return results.Select(x =>
+        {
+            var dto = MapToResponseDto(x.Lot);
+            return dto with { DistanceKm = (decimal?)Math.Round(x.DistanceKm, 3) };
+        });
+    }
+
     private static ParkingLotResponseDto MapToResponseDto(ParkingLot parkingLot)
     {
         var availableCapacity = parkingLot.TotalCapacity - parkingLot.CurrentOccupancy;
@@ -180,6 +237,9 @@ public sealed class ParkingLotService : IParkingLotService
             OwnerName: parkingLot.Owner?.FullName ?? "Unknown",
             Name: parkingLot.Name,
             Address: parkingLot.Address,
+            Latitude: parkingLot.Latitude,
+            Longitude: parkingLot.Longitude,
+            DistanceKm: null,
             TotalCapacity: parkingLot.TotalCapacity,
             AvailableCapacity: availableCapacity > 0 ? availableCapacity : 0,
             CurrentOccupancy: parkingLot.CurrentOccupancy,
@@ -189,5 +249,26 @@ public sealed class ParkingLotService : IParkingLotService
             CreatedAt: parkingLot.CreatedAt,
             UpdatedAt: parkingLot.UpdatedAt
         );
+    }
+
+    /// <summary>
+    /// Calculates the great-circle distance between two points on the Earth using the Haversine formula.
+    /// </summary>
+    private static double CalculateDistanceKm(double lat1, double lon1, double lat2, double lon2)
+    {
+        const double EarthRadiusKm = 6371.0;
+
+        double ToRadians(double angle) => Math.PI * angle / 180.0;
+
+        var dLat = ToRadians(lat2 - lat1);
+        var dLon = ToRadians(lon2 - lon1);
+
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                Math.Cos(ToRadians(lat1)) * Math.Cos(ToRadians(lat2)) *
+                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+
+        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+
+        return EarthRadiusKm * c;
     }
 }

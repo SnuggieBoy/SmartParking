@@ -11,6 +11,9 @@ public sealed record ParkingLotResponseDto(
     string OwnerName,
     string Name,
     string Address,
+    decimal? Latitude,
+    decimal? Longitude,
+    decimal? DistanceKm,
     int TotalCapacity,
     int AvailableCapacity,
     int CurrentOccupancy,
@@ -35,9 +38,15 @@ public sealed record CreateParkingLotDto(
     
     [Range(1, 10000, ErrorMessage = "Total capacity must be between 1 and 10000")]
     int TotalCapacity,
-    
+
     [Range(0.01, 1000000, ErrorMessage = "Price per hour must be between 0.01 and 1000000")]
-    decimal PricePerHour
+    decimal PricePerHour,
+
+    [Range(-90, 90, ErrorMessage = "Latitude must be between -90 and 90 degrees")]
+    decimal? Latitude,
+
+    [Range(-180, 180, ErrorMessage = "Longitude must be between -180 and 180 degrees")]
+    decimal? Longitude
 );
 
 /// <summary>
@@ -57,7 +66,13 @@ public sealed record UpdateParkingLotDto(
     
     [Range(0.01, 1000000, ErrorMessage = "Price per hour must be between 0.01 and 1000000")]
     decimal PricePerHour,
-    
+
+    [Range(-90, 90, ErrorMessage = "Latitude must be between -90 and 90 degrees")]
+    decimal? Latitude,
+
+    [Range(-180, 180, ErrorMessage = "Longitude must be between -180 and 180 degrees")]
+    decimal? Longitude,
+
     bool IsActive
 );
 
@@ -78,6 +93,8 @@ public sealed record ParkingLotDto(
     Guid ParkingLotId,
     string Name,
     string Address,
+    decimal? Latitude,
+    decimal? Longitude,
     int TotalCapacity,
     int AvailableCapacity,
     int CurrentOccupancy,

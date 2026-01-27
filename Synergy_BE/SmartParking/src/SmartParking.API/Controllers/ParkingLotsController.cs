@@ -28,6 +28,25 @@ public sealed class ParkingLotsController : BaseApiController
     }
 
     /// <summary>
+    /// PUBLIC ENDPOINT: Find nearby parking lots around a given location.
+    /// This is used by mobile app to show closest lots and then open navigation.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("nearby")]
+    [ProducesResponseType(typeof(ApiResponse<IEnumerable<ParkingLotResponseDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ApiResponse<IEnumerable<ParkingLotResponseDto>>>> GetNearby(
+        [FromQuery] decimal lat,
+        [FromQuery] decimal lng,
+        [FromQuery] decimal radiusKm = 5,
+        [FromQuery] int maxResults = 20,
+        CancellationToken ct = default)
+    {
+        var lots = await _parkingLotService.GetNearbyAsync(lat, lng, radiusKm, maxResults, ct);
+        return Ok(ApiResponse<IEnumerable<ParkingLotResponseDto>>.SuccessResponse(lots, "Nearby parking lots retrieved successfully"));
+    }
+
+    /// <summary>
     /// PUBLIC ENDPOINT: Anyone can view available parking lots (paginated, filterable)
     /// </summary>
     [AllowAnonymous]
