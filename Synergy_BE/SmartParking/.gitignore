@@ -70,7 +70,6 @@ $RECYCLE.BIN/
 .DS_Store
 
 # Sensitive configuration files
-**/appsettings.Development.json
 **/appsettings.Production.json
 **/*.secret.json
 
