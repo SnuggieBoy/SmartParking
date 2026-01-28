@@ -36,6 +36,8 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
 
     public virtual DbSet<ParkingLot> ParkingLots { get; set; }
 
+    public virtual DbSet<OwnerUpgradeRequest> OwnerUpgradeRequests { get; set; }
+
     public virtual DbSet<ParkingLocation> ParkingLocations { get; set; }
 
     public virtual DbSet<PaymentLog> PaymentLogs { get; set; }
@@ -448,6 +450,37 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
                 
             // Global query filter for soft delete
             entity.HasQueryFilter(e => !e.IsDeleted);
+        });
+
+        modelBuilder.Entity<OwnerUpgradeRequest>(entity =>
+        {
+            entity.HasKey(e => e.RequestId).HasName("PK_OwnerUpgradeRequests");
+
+            entity.Property(e => e.RequestId).HasDefaultValueSql("(newid())");
+            entity.Property(e => e.FullNameSnapshot).HasMaxLength(100);
+            entity.Property(e => e.EmailSnapshot).HasMaxLength(256);
+            entity.Property(e => e.PhoneSnapshot).HasMaxLength(50);
+            entity.Property(e => e.ParkingLotName).HasMaxLength(100);
+            entity.Property(e => e.ParkingLotAddress).HasMaxLength(255);
+            entity.Property(e => e.PlanType).HasMaxLength(50);
+            entity.Property(e => e.FeeAmount).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.Status).HasMaxLength(50);
+            entity.Property(e => e.RejectReason).HasMaxLength(500);
+
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasIndex(e => new { e.Status, e.CreatedAt })
+                .HasDatabaseName("IX_OwnerUpgradeRequests_Status_CreatedAt");
+
+            entity.HasIndex(e => e.UserId)
+                .HasDatabaseName("IX_OwnerUpgradeRequests_UserId");
+
+            entity.HasOne(d => d.User)
+                .WithMany(p => p.OwnerUpgradeRequests)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_OwnerUpgradeRequests_Users");
         });
 
         // Global query filter for soft delete

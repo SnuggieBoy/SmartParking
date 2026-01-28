@@ -15,6 +15,7 @@ public static class ServiceCollectionExtensions
         services.Configure<GoogleOAuthSettings>(configuration.GetSection("GoogleOAuth"));
         services.Configure<VnPaySettings>(configuration.GetSection("VnPay"));
         services.Configure<CommissionSettings>(configuration.GetSection("CommissionSettings"));
+        services.Configure<OwnerSubscriptionSettings>(configuration.GetSection("OwnerSubscriptionSettings"));
 
         // Services
         services.AddScoped<IJwtTokenService, JwtTokenService>();
@@ -25,6 +26,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IVehicleService, VehicleService>();
         services.AddScoped<IPaymentService, PaymentService>();
         services.AddScoped<IParkingLocationService, ParkingLocationService>();
+        services.AddScoped<IOwnerUpgradeService, OwnerUpgradeService>();
         
         services.AddHttpClient<IGoogleAuthService, GoogleAuthService>();
 
