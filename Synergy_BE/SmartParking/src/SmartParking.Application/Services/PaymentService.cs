@@ -1,5 +1,7 @@
 using SmartParking.Application.Common.Exceptions;
+using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.Payment;
+using SmartParking.Application.DTOs.User;
 using SmartParking.Application.Interfaces.Repositories;
 using SmartParking.Application.Interfaces.Services;
 using SmartParking.Domain.Constants;
@@ -52,6 +54,30 @@ public sealed class PaymentService : IPaymentService
             payment.PaymentMethod ?? PaymentConstants.VnPayProvider,
             paidAt
         );
+    }
+
+    public async Task<PagedResult<PaymentHistoryDto>> GetPaymentHistoryAsync(
+        Guid userId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var pagedResult = await _paymentRepository.GetByUserIdAsync(userId, page, pageSize, ct);
+
+        var dtos = pagedResult.Items.Select(p => new PaymentHistoryDto(
+            PaymentId: p.PaymentId,
+            BookingId: p.BookingId,
+            ParkingLotName: p.Booking?.ParkingLot?.Name,
+            Amount: p.Amount,
+            PaymentMethod: p.PaymentMethod ?? "Unknown",
+            PaymentStatus: p.PaymentStatus ?? "Unknown",
+            TransactionRef: p.VnpTxnRef ?? p.SePayOrderId ?? "N/A",
+            CreatedAt: p.CreatedAt,
+            PaidAt: p.PaymentStatus == nameof(PaymentStatus.Success) ? p.UpdatedAt : null,
+            PaymentPurpose: p.BookingId != Guid.Empty ? "Booking" : "Subscription"
+        )).ToList();
+
+        return new PagedResult<PaymentHistoryDto>(dtos, pagedResult.Page, pagedResult.PageSize, pagedResult.TotalCount);
     }
 }
 

@@ -55,4 +55,8 @@ public partial class ParkingLot
     public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
 
     public virtual User Owner { get; set; } = null!;
+
+    public virtual ICollection<Favorite> Favorites { get; set; } = new List<Favorite>();
+
+    public virtual ICollection<Review> Reviews { get; set; } = new List<Review>();
 }

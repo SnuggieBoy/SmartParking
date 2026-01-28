@@ -167,4 +167,77 @@ public sealed class UserService : IUserService
         await _userRepository.UpdateAsync(user, ct);
         return await GetByIdAsync(userId, ct);
     }
+
+    #region User Profile Operations
+
+    public async Task<UserProfileDto> GetProfileAsync(Guid userId, CancellationToken ct = default)
+    {
+        var user = await _context.Users
+            .Include(u => u.Role)
+            .FirstOrDefaultAsync(u => u.UserId == userId, ct);
+
+        if (user == null)
+        {
+            throw new NotFoundException("User not found");
+        }
+
+        var totalBookings = await _context.Bookings
+            .Where(b => b.UserId == userId && !b.IsDeleted)
+            .CountAsync(ct);
+
+        var completedBookings = await _context.Bookings
+            .Where(b => b.UserId == userId && !b.IsDeleted && b.Status == "Completed")
+            .CountAsync(ct);
+
+        var totalVehicles = await _context.Vehicles
+            .Where(v => v.UserId == userId && v.IsActive == true)
+            .CountAsync(ct);
+
+        var totalParkingLots = await _context.ParkingLots
+            .Where(p => p.OwnerId == userId && !p.IsDeleted)
+            .CountAsync(ct);
+
+        return new UserProfileDto(
+            UserId: user.UserId,
+            FullName: user.FullName ?? "Unknown",
+            Email: user.Email ?? "",
+            Phone: user.Phone,
+            AvatarUrl: null, // Can be extended if avatar field is added
+            RoleName: user.Role?.RoleName ?? "User",
+            EmailConfirmed: user.EmailConfirmed,
+            CreatedAt: user.CreatedAt,
+            TotalBookings: totalBookings,
+            CompletedBookings: completedBookings,
+            TotalVehicles: totalVehicles,
+            TotalParkingLots: totalParkingLots
+        );
+    }
+
+    public async Task<UserProfileDto> UpdateProfileAsync(Guid userId, UpdateUserProfileDto request, CancellationToken ct = default)
+    {
+        var user = await _userRepository.GetByIdAsync(userId, ct);
+        if (user == null)
+        {
+            throw new NotFoundException("User not found");
+        }
+
+        // Update only allowed fields for user self-update
+        if (!string.IsNullOrWhiteSpace(request.FullName))
+        {
+            user.FullName = request.FullName.Trim();
+        }
+
+        if (request.Phone != null)
+        {
+            user.Phone = request.Phone.Trim();
+        }
+
+        // AvatarUrl can be stored if we add the field to User entity
+        // For now, we skip it
+
+        await _userRepository.UpdateAsync(user, ct);
+        return await GetProfileAsync(userId, ct);
+    }
+
+    #endregion
 }

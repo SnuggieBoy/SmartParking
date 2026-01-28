@@ -2,6 +2,7 @@ using SmartParking.Application.Common.Exceptions;
 using SmartParking.Application.Common.Helpers;
 using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.Booking;
+using SmartParking.Application.DTOs.User;
 using SmartParking.Application.Interfaces.Repositories;
 using SmartParking.Application.Interfaces.Services;
 using SmartParking.Domain.Constants;
@@ -377,5 +378,142 @@ public sealed class BookingService : IBookingService
             booking.CheckInTime,
             booking.CheckOutTime
         );
+    }
+
+    public async Task<PagedResult<BookingHistoryDto>> GetBookingHistoryAsync(
+        Guid userId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        // Get only completed bookings
+        var pagedResult = await _bookingRepository.GetByUserIdAsync(
+            userId,
+            nameof(BookingStatus.Completed),
+            page,
+            pageSize,
+            ct);
+
+        var dtos = pagedResult.Items.Select(b => new BookingHistoryDto(
+            BookingId: b.BookingId,
+            ParkingLotName: b.ParkingLot?.Name ?? string.Empty,
+            ParkingLotAddress: b.ParkingLot?.Address ?? string.Empty,
+            VehiclePlate: b.Vehicle?.LicensePlate,
+            StartTime: b.StartTime,
+            EndTime: b.EndTime,
+            CheckInTime: b.CheckInTime,
+            CheckOutTime: b.CheckOutTime,
+            TotalAmount: b.TotalAmount,
+            PaymentStatus: b.PaymentTransactions?.FirstOrDefault()?.PaymentStatus ?? "Unknown",
+            CompletedAt: b.CheckOutTime ?? b.UpdatedAt ?? b.CreatedAt
+        )).ToList();
+
+        return new PagedResult<BookingHistoryDto>(dtos, pagedResult.Page, pagedResult.PageSize, pagedResult.TotalCount);
+    }
+
+    public async Task<InvoiceDto> GetInvoiceAsync(Guid bookingId, Guid userId, bool isAdmin, CancellationToken ct = default)
+    {
+        var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
+        if (booking == null)
+        {
+            throw new NotFoundException(Messages.Booking.NotFound);
+        }
+
+        // SECURITY: Validate ownership or Admin access
+        SecurityHelper.ValidateOwnership(booking.UserId, userId, isAdmin);
+
+        // Booking must be completed to generate invoice
+        if (booking.Status != nameof(BookingStatus.Completed))
+        {
+            throw new BadRequestException("Invoice can only be generated for completed bookings");
+        }
+
+        var parkingLot = await _parkingLotRepository.GetByIdAsync(booking.ParkingLotId, includeDeleted: false, ct);
+        if (parkingLot == null)
+        {
+            throw new NotFoundException(Messages.ParkingLot.NotFound);
+        }
+
+        // Calculate duration
+        var actualStart = booking.CheckInTime ?? booking.StartTime;
+        var actualEnd = booking.CheckOutTime ?? booking.EndTime;
+        var durationMinutes = (int)(actualEnd - actualStart).TotalMinutes;
+
+        // Get payment info
+        var payment = booking.PaymentTransactions?.FirstOrDefault(p => !p.IsDeleted);
+
+        // Generate invoice number
+        var invoiceNumber = $"INV-{booking.BookingId.ToString()[..8].ToUpper()}-{booking.CreatedAt:yyyyMMdd}";
+
+        return new InvoiceDto(
+            InvoiceNumber: invoiceNumber,
+            InvoiceDate: DateTime.UtcNow,
+            UserId: booking.UserId,
+            CustomerName: booking.User?.FullName ?? "Unknown",
+            CustomerEmail: booking.User?.Email ?? "",
+            CustomerPhone: booking.User?.Phone,
+            BookingId: booking.BookingId,
+            ParkingLotName: parkingLot.Name ?? "",
+            ParkingLotAddress: parkingLot.Address ?? "",
+            VehiclePlate: booking.Vehicle?.LicensePlate,
+            StartTime: booking.StartTime,
+            EndTime: booking.EndTime,
+            CheckInTime: booking.CheckInTime,
+            CheckOutTime: booking.CheckOutTime,
+            DurationMinutes: durationMinutes,
+            PricePerHour: parkingLot.PricePerHour,
+            SubTotal: booking.TotalAmount,
+            Commission: 0, // Commission is internal, not shown on invoice
+            TotalAmount: booking.TotalAmount,
+            PaymentMethod: payment?.PaymentMethod ?? "N/A",
+            PaymentStatus: payment?.PaymentStatus ?? "N/A",
+            TransactionRef: payment?.VnpTxnRef ?? payment?.SePayOrderId ?? "N/A",
+            PaidAt: payment?.UpdatedAt,
+            OwnerName: parkingLot.Owner?.FullName ?? "N/A",
+            OwnerBankAccount: null, // Not exposed on invoice for privacy
+            OwnerBankName: null
+        );
+    }
+
+    public async Task<BookingDto> ExtendBookingAsync(Guid bookingId, DateTime newEndTime, Guid userId, CancellationToken ct = default)
+    {
+        var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
+        if (booking == null)
+        {
+            throw new NotFoundException(Messages.Booking.NotFound);
+        }
+
+        // Only owner can extend
+        if (booking.UserId != userId)
+        {
+            throw new ForbiddenException();
+        }
+
+        // Can only extend InProgress or Confirmed bookings
+        if (booking.Status != nameof(BookingStatus.InProgress) && booking.Status != nameof(BookingStatus.Confirmed))
+        {
+            throw new BadRequestException("Can only extend confirmed or in-progress bookings");
+        }
+
+        // New end time must be after current end time
+        if (newEndTime <= booking.EndTime)
+        {
+            throw new BadRequestException("New end time must be after current end time");
+        }
+
+        // Recalculate amount
+        var parkingLot = await _parkingLotRepository.GetByIdAsync(booking.ParkingLotId, includeDeleted: false, ct);
+        var duration = newEndTime - booking.StartTime;
+        var totalAmount = CalculateAmount(duration, parkingLot!.PricePerHour);
+
+        booking.EndTime = newEndTime;
+        booking.TotalAmount = totalAmount;
+        booking.UpdatedAt = DateTime.UtcNow;
+
+        await _bookingRepository.UpdateAsync(booking, ct);
+
+        // Reload with navigation properties
+        booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
+        return MapToDto(booking!);
     }
 }

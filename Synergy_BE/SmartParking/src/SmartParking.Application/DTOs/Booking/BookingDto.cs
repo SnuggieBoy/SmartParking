@@ -92,3 +92,11 @@ public sealed record BookingDto(
     decimal TotalAmount,
     DateTime CreatedAt
 );
+
+/// <summary>
+/// DTO for extending booking time
+/// </summary>
+public sealed record ExtendBookingDto(
+    [Required(ErrorMessage = "New end time is required")]
+    DateTime NewEndTime
+);

@@ -1,4 +1,5 @@
 using SmartParking.Application.DTOs.Booking;
+using SmartParking.Application.DTOs.User;
 using SmartParking.Application.Common.Models;
 
 namespace SmartParking.Application.Interfaces.Services;
@@ -30,4 +31,23 @@ public interface IBookingService
         int page,
         int pageSize,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Get booking history (completed bookings only)
+    /// </summary>
+    Task<PagedResult<BookingHistoryDto>> GetBookingHistoryAsync(
+        Guid userId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Get invoice for a completed booking
+    /// </summary>
+    Task<InvoiceDto> GetInvoiceAsync(Guid bookingId, Guid userId, bool isAdmin, CancellationToken ct = default);
+
+    /// <summary>
+    /// Extend booking time (when user is still parked)
+    /// </summary>
+    Task<BookingDto> ExtendBookingAsync(Guid bookingId, DateTime newEndTime, Guid userId, CancellationToken ct = default);
 }

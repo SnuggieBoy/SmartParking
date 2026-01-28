@@ -4,6 +4,7 @@ using SmartParking.API.Authorization.Policies;
 using SmartParking.API.Models.Payment;
 using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.Payment;
+using SmartParking.Application.DTOs.User;
 using SmartParking.Application.Interfaces.Services;
 using SmartParking.Domain.Constants;
 using System.Text;
@@ -97,6 +98,22 @@ public sealed class PaymentController : BaseApiController
         var isAdmin = IsAdmin();
         var dto = await _paymentService.GetPaymentStatusByBookingAsync(bookingId, userId, isAdmin, ct);
         return Ok(ApiResponse<PaymentStatusDto>.SuccessResponse(dto, Messages.Payment.PaymentStatusRetrieved));
+    }
+
+    /// <summary>
+    /// Get payment history for current user
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
+    [HttpGet("history")]
+    [ProducesResponseType(typeof(ApiResponse<PagedResult<PaymentHistoryDto>>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<PagedResult<PaymentHistoryDto>>>> GetPaymentHistory(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken ct = default)
+    {
+        var userId = GetUserIdFromToken();
+        var result = await _paymentService.GetPaymentHistoryAsync(userId, page, pageSize, ct);
+        return Ok(ApiResponse<PagedResult<PaymentHistoryDto>>.SuccessResponse(result, "Payment history retrieved successfully"));
     }
 
     #region SePay Integration

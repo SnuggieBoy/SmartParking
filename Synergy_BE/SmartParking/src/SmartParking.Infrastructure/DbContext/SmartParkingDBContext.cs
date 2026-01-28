@@ -55,6 +55,12 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
     public virtual DbSet<UserToken> UserTokens { get; set; }
 
     public virtual DbSet<Vehicle> Vehicles { get; set; }
+
+    public virtual DbSet<Favorite> Favorites { get; set; }
+
+    public virtual DbSet<Review> Reviews { get; set; }
+
+    public virtual DbSet<Notification> Notifications { get; set; }
     public static string GetConnectionString(string connectionStringName)
     {
         var config = new ConfigurationBuilder()
@@ -509,6 +515,107 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_OwnerBankAccounts_Users");
+        });
+
+        // Favorite entity configuration
+        modelBuilder.Entity<Favorite>(entity =>
+        {
+            entity.HasKey(e => e.FavoriteId).HasName("PK_Favorites");
+
+            entity.Property(e => e.FavoriteId).HasDefaultValueSql("(newid())");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+
+            // Unique constraint: user can only favorite a parking lot once
+            entity.HasIndex(e => new { e.UserId, e.ParkingLotId })
+                .IsUnique()
+                .HasDatabaseName("UQ_Favorites_User_ParkingLot");
+
+            entity.HasOne(d => d.User)
+                .WithMany(p => p.Favorites)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_Favorites_Users");
+
+            entity.HasOne(d => d.ParkingLot)
+                .WithMany(p => p.Favorites)
+                .HasForeignKey(d => d.ParkingLotId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_Favorites_ParkingLots");
+        });
+
+        // Review entity configuration
+        modelBuilder.Entity<Review>(entity =>
+        {
+            entity.HasKey(e => e.ReviewId).HasName("PK_Reviews");
+
+            entity.Property(e => e.ReviewId).HasDefaultValueSql("(newid())");
+            entity.Property(e => e.Rating).IsRequired();
+            entity.Property(e => e.Comment).HasMaxLength(1000);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+            entity.Property(e => e.IsDeleted).HasDefaultValue(false);
+
+            // Check constraint for rating
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_Reviews_Rating", "[Rating] >= 1 AND [Rating] <= 5");
+            });
+
+            // Unique constraint: one review per booking
+            entity.HasIndex(e => e.BookingId)
+                .IsUnique()
+                .HasDatabaseName("UQ_Reviews_BookingId")
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasIndex(e => new { e.ParkingLotId, e.IsDeleted })
+                .HasDatabaseName("IX_Reviews_ParkingLotId_IsDeleted")
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(d => d.User)
+                .WithMany(p => p.Reviews)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Reviews_Users");
+
+            entity.HasOne(d => d.ParkingLot)
+                .WithMany(p => p.Reviews)
+                .HasForeignKey(d => d.ParkingLotId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Reviews_ParkingLots");
+
+            entity.HasOne(d => d.Booking)
+                .WithMany()
+                .HasForeignKey(d => d.BookingId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Reviews_Bookings");
+
+            // Global query filter for soft delete
+            entity.HasQueryFilter(e => !e.IsDeleted);
+        });
+
+        // Notification entity configuration
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.HasKey(e => e.NotificationId).HasName("PK_Notifications");
+
+            entity.Property(e => e.NotificationId).HasDefaultValueSql("(newid())");
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Message).IsRequired().HasMaxLength(2000);
+            entity.Property(e => e.Type).IsRequired().HasMaxLength(50).HasDefaultValue("Info");
+            entity.Property(e => e.Data).HasMaxLength(4000);
+            entity.Property(e => e.IsRead).HasDefaultValue(false);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasIndex(e => new { e.UserId, e.IsRead })
+                .HasDatabaseName("IX_Notifications_UserId_IsRead");
+
+            entity.HasIndex(e => e.CreatedAt)
+                .HasDatabaseName("IX_Notifications_CreatedAt");
+
+            entity.HasOne(d => d.User)
+                .WithMany(p => p.Notifications)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_Notifications_Users");
         });
 
         // Global query filter for soft delete

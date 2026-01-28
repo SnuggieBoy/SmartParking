@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using SmartParking.API.Authorization.Policies;
 using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.Booking;
+using SmartParking.Application.DTOs.User;
 using SmartParking.Application.Interfaces.Services;
 using SmartParking.Domain.Constants;
 using System.IdentityModel.Tokens.Jwt;
@@ -126,5 +127,53 @@ public sealed class BookingsController : BaseApiController
         var isAdmin = User.IsInRole(AuthConstants.Roles.Admin);
         var result = await _bookingService.BookingCheckOutAsync(id, userId, isAdmin, ct);
         return Ok(ApiResponse<BookingCheckOutResponseDto>.SuccessResponse(result, Messages.Booking.CheckOutSuccess));
+    }
+
+    /// <summary>
+    /// Get booking history (completed bookings only)
+    /// </summary>
+    [HttpGet("history")]
+    [ProducesResponseType(typeof(ApiResponse<PagedResult<BookingHistoryDto>>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<PagedResult<BookingHistoryDto>>>> GetHistory(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken ct = default)
+    {
+        var userId = GetUserIdFromToken();
+        var result = await _bookingService.GetBookingHistoryAsync(userId, page, pageSize, ct);
+        return Ok(ApiResponse<PagedResult<BookingHistoryDto>>.SuccessResponse(result, "Booking history retrieved successfully"));
+    }
+
+    /// <summary>
+    /// Get invoice for a completed booking
+    /// </summary>
+    [HttpGet("{id:guid}/invoice")]
+    [ProducesResponseType(typeof(ApiResponse<InvoiceDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<InvoiceDto>>> GetInvoice(Guid id, CancellationToken ct = default)
+    {
+        var userId = GetUserIdFromToken();
+        var isAdmin = IsAdmin();
+        var invoice = await _bookingService.GetInvoiceAsync(id, userId, isAdmin, ct);
+        return Ok(ApiResponse<InvoiceDto>.SuccessResponse(invoice, "Invoice retrieved successfully"));
+    }
+
+    /// <summary>
+    /// Extend booking time (for confirmed or in-progress bookings)
+    /// </summary>
+    [HttpPut("{id:guid}/extend")]
+    [ProducesResponseType(typeof(ApiResponse<BookingDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<BookingDto>>> ExtendBooking(
+        Guid id,
+        [FromBody] ExtendBookingDto request,
+        CancellationToken ct = default)
+    {
+        var userId = GetUserIdFromToken();
+        var booking = await _bookingService.ExtendBookingAsync(id, request.NewEndTime, userId, ct);
+        return Ok(ApiResponse<BookingDto>.SuccessResponse(booking, "Booking extended successfully"));
     }
 }

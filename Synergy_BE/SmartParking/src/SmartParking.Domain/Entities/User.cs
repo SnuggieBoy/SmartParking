@@ -40,4 +40,10 @@ public partial class User
     public virtual ICollection<OwnerUpgradeRequest> OwnerUpgradeRequests { get; set; } = new List<OwnerUpgradeRequest>();
 
     public virtual ICollection<OwnerBankAccount> OwnerBankAccounts { get; set; } = new List<OwnerBankAccount>();
+
+    public virtual ICollection<Favorite> Favorites { get; set; } = new List<Favorite>();
+
+    public virtual ICollection<Review> Reviews { get; set; } = new List<Review>();
+
+    public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
 }

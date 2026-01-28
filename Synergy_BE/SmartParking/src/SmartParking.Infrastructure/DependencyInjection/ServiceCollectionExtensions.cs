@@ -40,6 +40,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IUserService, UserService>();
+        services.AddScoped<IOwnerDashboardService, OwnerDashboardService>();
+        services.AddScoped<IAdminService, AdminService>();
+        services.AddScoped<IFavoriteService, FavoriteService>();
+        services.AddScoped<IReviewService, ReviewService>();
+        services.AddScoped<INotificationService, NotificationService>();
 
         return services;
     }
