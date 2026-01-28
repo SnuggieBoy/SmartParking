@@ -19,4 +19,15 @@ public interface IBookingService
     Task<BookingCheckInResponseDto> BookingCheckInAsync(Guid bookingId, Guid userId, bool isAdmin, CancellationToken ct = default);
     Task<BookingCheckOutResponseDto> BookingCheckOutAsync(Guid bookingId, Guid userId, bool isAdmin, CancellationToken ct = default);
     Task<PagedResult<ParkingLotBookingDto>> GetBookingsByParkingLotAsync(Guid parkingLotId, Guid userId, bool isAdmin, int page, int pageSize, CancellationToken ct = default);
+    
+    /// <summary>
+    /// Get all bookings (admin only - can filter by status, userId, parkingLotId)
+    /// </summary>
+    Task<PagedResult<BookingListDto>> GetAllBookingsAsync(
+        string? status,
+        Guid? userId,
+        Guid? parkingLotId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
 }

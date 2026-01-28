@@ -29,4 +29,15 @@ public interface IBookingRepository
         Guid? excludeBookingId = null, 
         CancellationToken ct = default);
     Task<int> CountActiveBookingsByParkingLotAsync(Guid parkingLotId, CancellationToken ct = default);
+    
+    /// <summary>
+    /// Get all bookings with filters (admin only)
+    /// </summary>
+    Task<PagedResult<Booking>> GetAllAsync(
+        string? status,
+        Guid? userId,
+        Guid? parkingLotId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
 }

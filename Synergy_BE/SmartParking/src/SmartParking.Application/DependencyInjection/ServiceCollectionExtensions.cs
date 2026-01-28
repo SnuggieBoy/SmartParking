@@ -14,6 +14,7 @@ public static class ServiceCollectionExtensions
         services.Configure<JwtSettings>(configuration.GetSection("JwtSettings"));
         services.Configure<GoogleOAuthSettings>(configuration.GetSection("GoogleOAuth"));
         services.Configure<VnPaySettings>(configuration.GetSection("VnPay"));
+        services.Configure<CommissionSettings>(configuration.GetSection("CommissionSettings"));
 
         // Services
         services.AddScoped<IJwtTokenService, JwtTokenService>();

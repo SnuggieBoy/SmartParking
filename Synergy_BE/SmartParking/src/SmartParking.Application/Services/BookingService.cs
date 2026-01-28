@@ -327,6 +327,19 @@ public sealed class BookingService : IBookingService
         return new PagedResult<ParkingLotBookingDto>(dtos, pagedResult.Page, pagedResult.PageSize, pagedResult.TotalCount);
     }
 
+    public async Task<PagedResult<BookingListDto>> GetAllBookingsAsync(
+        string? status,
+        Guid? userId,
+        Guid? parkingLotId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var pagedResult = await _bookingRepository.GetAllAsync(status, userId, parkingLotId, page, pageSize, ct);
+        var dtos = pagedResult.Items.Select(MapToListDto).ToList();
+        return new PagedResult<BookingListDto>(dtos, pagedResult.Page, pagedResult.PageSize, pagedResult.TotalCount);
+    }
+
     private static decimal CalculateAmount(TimeSpan duration, decimal pricePerHour)
     {
         var totalHours = Math.Ceiling(duration.TotalHours);

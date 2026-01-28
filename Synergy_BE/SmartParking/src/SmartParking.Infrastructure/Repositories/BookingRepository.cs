@@ -176,4 +176,46 @@ public sealed class BookingRepository : IBookingRepository
                 && b.Status != nameof(BookingStatus.Completed)
                 && b.Status != nameof(BookingStatus.Expired), ct);
     }
+
+    public async Task<PagedResult<Booking>> GetAllAsync(
+        string? status,
+        Guid? userId,
+        Guid? parkingLotId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var query = _context.Bookings
+            .Include(b => b.User)
+            .Include(b => b.ParkingLot)
+            .Include(b => b.Vehicle)
+            .Where(b => !b.IsDeleted)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            query = query.Where(b => b.Status == status);
+        }
+
+        if (userId.HasValue)
+        {
+            query = query.Where(b => b.UserId == userId.Value);
+        }
+
+        if (parkingLotId.HasValue)
+        {
+            query = query.Where(b => b.ParkingLotId == parkingLotId.Value);
+        }
+
+        var totalCount = await query.CountAsync(ct);
+
+        var items = await query
+            .OrderByDescending(b => b.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        return new PagedResult<Booking>(items, page, pageSize, totalCount);
+    }
 }
