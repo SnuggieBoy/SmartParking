@@ -15,7 +15,8 @@ public sealed record UsersSummaryDto(
 /// </summary>
 public sealed record ParkingLotsSummaryDto(
     int TotalActiveParkingLots,
-    int TotalInactiveParkingLots
+    int TotalInactiveParkingLots,
+    int PendingApprovalParkingLots
 );
 
 /// <summary>

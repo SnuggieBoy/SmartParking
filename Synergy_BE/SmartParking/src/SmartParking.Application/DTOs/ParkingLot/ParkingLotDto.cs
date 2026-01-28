@@ -20,6 +20,7 @@ public sealed record ParkingLotResponseDto(
     decimal PricePerHour,
     string Status,
     bool IsActive,
+    string? RejectReason,
     DateTime CreatedAt,
     DateTime? UpdatedAt
 );

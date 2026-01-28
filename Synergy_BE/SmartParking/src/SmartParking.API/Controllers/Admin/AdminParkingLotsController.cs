@@ -27,7 +27,7 @@ public sealed class AdminParkingLotsController : BaseApiController
     }
 
     /// <summary>
-    /// Get all parking lots (admin view - includes inactive/deleted if needed)
+    /// Get all parking lots (admin view - includes inactive and by any status)
     /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponse<PagedResult<ParkingLotResponseDto>>), StatusCodes.Status200OK)]
@@ -43,6 +43,28 @@ public sealed class AdminParkingLotsController : BaseApiController
         var filter = new ParkingLotFilterDto(search, isActive, status, ownerId, page, pageSize);
         var result = await _parkingLotService.GetAllAsync(filter, ct);
         return Ok(ApiResponse<PagedResult<ParkingLotResponseDto>>.SuccessResponse(result, "Parking lots retrieved successfully"));
+    }
+
+    /// <summary>
+    /// Get all parking lots that are pending approval.
+    /// </summary>
+    [HttpGet("pending")]
+    [ProducesResponseType(typeof(ApiResponse<PagedResult<ParkingLotResponseDto>>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<PagedResult<ParkingLotResponseDto>>>> GetPending(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        var filter = new ParkingLotFilterDto(
+            SearchTerm: null,
+            IsActive: null,
+            Status: ParkingLotStatus.PendingApproval,
+            OwnerId: null,
+            Page: page,
+            PageSize: pageSize);
+
+        var result = await _parkingLotService.GetAllAsync(filter, ct);
+        return Ok(ApiResponse<PagedResult<ParkingLotResponseDto>>.SuccessResponse(result, "Pending parking lots retrieved successfully"));
     }
 
     /// <summary>
@@ -71,8 +93,8 @@ public sealed class AdminParkingLotsController : BaseApiController
         // Admin can specify ownerId, otherwise use admin's own ID
         var adminId = GetUserIdFromToken();
         var targetOwnerId = ownerId ?? adminId;
-        
-        var parkingLot = await _parkingLotService.CreateAsync(request, targetOwnerId, ct);
+
+        var parkingLot = await _parkingLotService.CreateAsync(request, targetOwnerId, isAdmin: true, ct);
         return CreatedAtAction(
             nameof(GetById),
             new { id = parkingLot.ParkingLotId },
@@ -109,6 +131,37 @@ public sealed class AdminParkingLotsController : BaseApiController
         var adminId = GetUserIdFromToken();
         var parkingLot = await _parkingLotService.ToggleActiveAsync(id, adminId, isAdmin: true, ct);
         return Ok(ApiResponse<ParkingLotResponseDto>.SuccessResponse(parkingLot, "Parking lot status updated successfully"));
+    }
+
+    /// <summary>
+    /// Approve a parking lot so it appears in public search.
+    /// </summary>
+    [HttpPost("{id:guid}/approve")]
+    [ProducesResponseType(typeof(ApiResponse<ParkingLotResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<ParkingLotResponseDto>>> Approve(
+        Guid id,
+        CancellationToken ct = default)
+    {
+        var adminId = GetUserIdFromToken();
+        var parkingLot = await _parkingLotService.ApproveAsync(id, adminId, ct);
+        return Ok(ApiResponse<ParkingLotResponseDto>.SuccessResponse(parkingLot, "Parking lot approved successfully"));
+    }
+
+    /// <summary>
+    /// Reject a parking lot registration with a reason.
+    /// </summary>
+    [HttpPost("{id:guid}/reject")]
+    [ProducesResponseType(typeof(ApiResponse<ParkingLotResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<ParkingLotResponseDto>>> Reject(
+        Guid id,
+        [FromBody] RejectParkingLotDto request,
+        CancellationToken ct = default)
+    {
+        var adminId = GetUserIdFromToken();
+        var parkingLot = await _parkingLotService.RejectAsync(id, adminId, request.Reason, ct);
+        return Ok(ApiResponse<ParkingLotResponseDto>.SuccessResponse(parkingLot, "Parking lot rejected"));
     }
 
     /// <summary>

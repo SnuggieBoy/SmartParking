@@ -8,10 +8,14 @@ public interface IParkingLotService
     Task<ParkingLotResponseDto> GetByIdAsync(Guid parkingLotId, CancellationToken ct = default);
     Task<PagedResult<ParkingLotResponseDto>> GetAllAsync(ParkingLotFilterDto filter, CancellationToken ct = default);
     Task<IEnumerable<ParkingLotResponseDto>> GetMyParkingLotsAsync(Guid ownerId, CancellationToken ct = default);
-    Task<ParkingLotResponseDto> CreateAsync(CreateParkingLotDto request, Guid ownerId, CancellationToken ct = default);
+    Task<ParkingLotResponseDto> CreateAsync(CreateParkingLotDto request, Guid ownerId, bool isAdmin, CancellationToken ct = default);
     Task<ParkingLotResponseDto> UpdateAsync(Guid parkingLotId, UpdateParkingLotDto request, Guid userId, bool isAdmin, CancellationToken ct = default);
     Task DeleteAsync(Guid parkingLotId, Guid userId, bool isAdmin, CancellationToken ct = default);
     Task<ParkingLotResponseDto> ToggleActiveAsync(Guid parkingLotId, Guid userId, bool isAdmin, CancellationToken ct = default);
+
+    Task<ParkingLotResponseDto> ApproveAsync(Guid parkingLotId, Guid adminId, CancellationToken ct = default);
+
+    Task<ParkingLotResponseDto> RejectAsync(Guid parkingLotId, Guid adminId, string reason, CancellationToken ct = default);
 
     /// <summary>
     /// Find nearby parking lots around a given location, sorted by distance (ascending).

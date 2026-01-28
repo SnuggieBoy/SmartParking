@@ -27,6 +27,8 @@ public partial class ParkingLot
     public decimal PricePerHour { get; set; }
 
     public string Status { get; set; } = "Active";
+
+    public string? RejectReason { get; set; }
     
     public bool IsActive { get; set; } = true;
 

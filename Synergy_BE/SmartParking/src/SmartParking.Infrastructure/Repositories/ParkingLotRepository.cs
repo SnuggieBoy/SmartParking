@@ -165,7 +165,7 @@ public sealed class ParkingLotRepository : IParkingLotRepository
 
         if (onlyActive)
         {
-            query = query.Where(p => p.IsActive);
+            query = query.Where(p => p.IsActive && p.Status == "Approved");
         }
 
         return await query.ToListAsync(ct);

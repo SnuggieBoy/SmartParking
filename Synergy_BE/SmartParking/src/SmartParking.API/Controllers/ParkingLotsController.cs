@@ -60,7 +60,13 @@ public sealed class ParkingLotsController : BaseApiController
         [FromQuery] int pageSize = 10,
         CancellationToken ct = default)
     {
-        var filter = new ParkingLotFilterDto(search, isActive, status, null, page, pageSize);
+        // Public listing: by default only show Approved & Active lots
+        var effectiveIsActive = isActive ?? true;
+        var effectiveStatus = string.IsNullOrWhiteSpace(status)
+            ? ParkingLotStatus.Approved
+            : status;
+
+        var filter = new ParkingLotFilterDto(search, effectiveIsActive, effectiveStatus, null, page, pageSize);
         var result = await _parkingLotService.GetAllAsync(filter, ct);
         return Ok(ApiResponse<PagedResult<ParkingLotResponseDto>>.SuccessResponse(result, "Parking lots retrieved successfully"));
     }
@@ -103,11 +109,13 @@ public sealed class ParkingLotsController : BaseApiController
         CancellationToken ct = default)
     {
         var userId = GetUserIdFromToken();
-        var parkingLot = await _parkingLotService.CreateAsync(request, userId, ct);
+        var parkingLot = await _parkingLotService.CreateAsync(request, userId, isAdmin: false, ct);
         return CreatedAtAction(
             nameof(GetById),
             new { id = parkingLot.ParkingLotId },
-            ApiResponse<ParkingLotResponseDto>.SuccessResponse(parkingLot, Messages.ParkingLot.CreateSuccess)
+            ApiResponse<ParkingLotResponseDto>.SuccessResponse(
+                parkingLot,
+                "Parking lot created. Waiting for admin approval.")
         );
     }
 
