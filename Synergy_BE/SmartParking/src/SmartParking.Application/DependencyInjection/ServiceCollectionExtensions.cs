@@ -27,6 +27,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPaymentService, PaymentService>();
         services.AddScoped<IParkingLocationService, ParkingLocationService>();
         services.AddScoped<IOwnerUpgradeService, OwnerUpgradeService>();
+        services.AddScoped<IOwnerBankAccountService, OwnerBankAccountService>();
         
         services.AddHttpClient<IGoogleAuthService, GoogleAuthService>();
 

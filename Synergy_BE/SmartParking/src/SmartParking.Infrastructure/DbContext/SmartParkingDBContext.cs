@@ -38,6 +38,8 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
 
     public virtual DbSet<OwnerUpgradeRequest> OwnerUpgradeRequests { get; set; }
 
+    public virtual DbSet<OwnerBankAccount> OwnerBankAccounts { get; set; }
+
     public virtual DbSet<ParkingLocation> ParkingLocations { get; set; }
 
     public virtual DbSet<PaymentLog> PaymentLogs { get; set; }
@@ -481,6 +483,32 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_OwnerUpgradeRequests_Users");
+        });
+
+        modelBuilder.Entity<OwnerBankAccount>(entity =>
+        {
+            entity.HasKey(e => e.OwnerBankAccountId).HasName("PK_OwnerBankAccounts");
+
+            entity.Property(e => e.OwnerBankAccountId).HasDefaultValueSql("(newid())");
+            entity.Property(e => e.BankCode).HasMaxLength(20);
+            entity.Property(e => e.BankName).HasMaxLength(100);
+            entity.Property(e => e.AccountNumber).HasMaxLength(50);
+            entity.Property(e => e.AccountHolderName).HasMaxLength(100);
+
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasIndex(e => e.UserId)
+                .HasDatabaseName("IX_OwnerBankAccounts_UserId");
+
+            entity.HasIndex(e => new { e.UserId, e.IsDefault })
+                .HasDatabaseName("IX_OwnerBankAccounts_UserId_IsDefault");
+
+            entity.HasOne(d => d.User)
+                .WithMany(p => p.OwnerBankAccounts)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_OwnerBankAccounts_Users");
         });
 
         // Global query filter for soft delete
