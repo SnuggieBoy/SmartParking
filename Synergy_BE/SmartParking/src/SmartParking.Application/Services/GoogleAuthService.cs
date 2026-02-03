@@ -1,18 +1,20 @@
+using Google.Apis.Auth;
 using Microsoft.Extensions.Options;
 using SmartParking.Application.Common.Settings;
 using SmartParking.Application.Interfaces.Services;
-using System.Net.Http.Json;
 
 namespace SmartParking.Application.Services;
 
+/// <summary>
+/// Google Authentication Service - Uses Google.Apis.Auth SDK to validate ID tokens
+/// (Same pattern as eduprompt project)
+/// </summary>
 public sealed class GoogleAuthService : IGoogleAuthService
 {
-    private readonly HttpClient _httpClient;
     private readonly GoogleOAuthSettings _settings;
 
-    public GoogleAuthService(HttpClient httpClient, IOptions<GoogleOAuthSettings> settings)
+    public GoogleAuthService(IOptions<GoogleOAuthSettings> settings)
     {
-        _httpClient = httpClient;
         _settings = settings.Value;
     }
 
@@ -20,48 +22,35 @@ public sealed class GoogleAuthService : IGoogleAuthService
     {
         if (string.IsNullOrWhiteSpace(googleToken)) return null;
 
-        // Google tokeninfo: id_token= (from native SDK) hoặc access_token= (từ OAuth flow, e.g. Expo)
-        var isLikelyIdToken = googleToken.Contains('.') && googleToken.Count(c => c == '.') == 2;
-        var url = isLikelyIdToken
-            ? $"https://oauth2.googleapis.com/tokeninfo?id_token={Uri.EscapeDataString(googleToken)}"
-            : $"https://oauth2.googleapis.com/tokeninfo?access_token={Uri.EscapeDataString(googleToken)}";
-
         try
         {
-            var response = await _httpClient.GetFromJsonAsync<GoogleTokenInfoResponse>(url, ct);
-            if (response == null || response.aud != _settings.ClientId)
+            // Use Google.Apis.Auth SDK to validate ID token (same as eduprompt)
+            var validationSettings = new GoogleJsonWebSignature.ValidationSettings
+            {
+                Audience = new[] { _settings.ClientId }
+            };
+
+            var payload = await GoogleJsonWebSignature.ValidateAsync(googleToken, validationSettings);
+            
+            if (payload == null)
+            {
                 return null;
+            }
+
             return new GoogleUserInfo(
-                Email: response.email ?? string.Empty,
-                Name: response.name ?? string.Empty,
-                GoogleUserId: response.sub ?? string.Empty
+                Email: payload.Email ?? string.Empty,
+                Name: payload.Name ?? string.Empty,
+                GoogleUserId: payload.Subject ?? string.Empty
             );
         }
-        catch
+        catch (InvalidJwtException)
         {
-            if (isLikelyIdToken) return null;
-            try
-            {
-                var fallback = await _httpClient.GetFromJsonAsync<GoogleTokenInfoResponse>(
-                    $"https://oauth2.googleapis.com/tokeninfo?id_token={Uri.EscapeDataString(googleToken)}", ct);
-                if (fallback == null || fallback.aud != _settings.ClientId) return null;
-                return new GoogleUserInfo(
-                    Email: fallback.email ?? string.Empty,
-                    Name: fallback.name ?? string.Empty,
-                    GoogleUserId: fallback.sub ?? string.Empty
-                );
-            }
-            catch
-            {
-                return null;
-            }
+            // Invalid ID token
+            return null;
+        }
+        catch (Exception)
+        {
+            return null;
         }
     }
-
-    private sealed record GoogleTokenInfoResponse(
-        string? sub,
-        string? email,
-        string? name,
-        string? aud
-    );
 }
