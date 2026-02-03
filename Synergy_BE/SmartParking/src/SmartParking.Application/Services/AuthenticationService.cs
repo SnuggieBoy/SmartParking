@@ -296,7 +296,7 @@ public sealed class AuthenticationService : IAuthenticationService
 
         var userAuth = await _userAuthRepository.GetByProviderUserIdAsync(AuthConstants.GoogleProvider, googleUser.GoogleUserId, ct);
         
-        User user;
+        User? user;
         if (userAuth != null)
         {
             user = userAuth.User;
@@ -307,25 +307,38 @@ public sealed class AuthenticationService : IAuthenticationService
         }
         else
         {
-            var userRole = await _roleRepository.GetByNameAsync(AuthConstants.Roles.User, ct);
-            if (userRole == null)
+            // Check if user already exists by email (matching eduprompt logic)
+            user = await _userRepository.GetByEmailAsync(googleUser.Email, ct);
+            
+            if (user == null)
             {
-                throw new NotFoundException(Messages.Auth.RoleNotFound);
+                // Create new user if not found
+                var userRole = await _roleRepository.GetByNameAsync(AuthConstants.Roles.User, ct);
+                if (userRole == null)
+                {
+                    throw new NotFoundException(Messages.Auth.RoleNotFound);
+                }
+
+                user = new User
+                {
+                    UserId = Guid.NewGuid(),
+                    FullName = googleUser.Name,
+                    Email = googleUser.Email,
+                    Phone = string.Empty,
+                    RoleId = userRole.RoleId,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                user = await _userRepository.CreateAsync(user, ct);
+                user.Role = userRole;
+            }
+            else if (user.IsActive != true)
+            {
+                throw new UnauthorizedException(Messages.Auth.AccountInactive);
             }
 
-            user = new User
-            {
-                UserId = Guid.NewGuid(),
-                FullName = googleUser.Name,
-                Email = googleUser.Email,
-                Phone = string.Empty,
-                RoleId = userRole.RoleId,
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            user = await _userRepository.CreateAsync(user, ct);
-
+            // Create new UserAuth record to link this Google account to the user
             userAuth = new UserAuth
             {
                 AuthId = Guid.NewGuid(),
@@ -337,7 +350,11 @@ public sealed class AuthenticationService : IAuthenticationService
             };
 
             await _userAuthRepository.CreateAsync(userAuth, ct);
-            user.Role = userRole;
+        }
+
+        if (user!.Role == null)
+        {
+            user.Role = await _roleRepository.GetByIdAsync(user.RoleId, ct);
         }
 
         return await GenerateAuthResponse(user, ct);

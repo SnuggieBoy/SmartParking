@@ -29,7 +29,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IOwnerUpgradeService, OwnerUpgradeService>();
         services.AddScoped<IOwnerBankAccountService, OwnerBankAccountService>();
         
-        services.AddHttpClient<IGoogleAuthService, GoogleAuthService>();
+        services.AddScoped<IGoogleAuthService, GoogleAuthService>();
 
         return services;
     }
