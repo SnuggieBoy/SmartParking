@@ -294,14 +294,14 @@ public sealed class SePayService : ISePayService
         await _paymentRepository.CreateLogAsync(log, ct);
 
         // STEP 6: Update booking status if payment successful
-        if (isSuccess)
+        if (isSuccess && payment.BookingId.HasValue)
         {
-            var booking = await _bookingRepository.GetByIdAsync(payment.BookingId, includeDeleted: false, ct);
+            var booking = await _bookingRepository.GetByIdAsync(payment.BookingId.Value, includeDeleted: false, ct);
                 _logger.LogInformation(
                     "Booking confirmed via SePay. BookingId: {BookingId}, OrderId: {OrderId}",
                     booking.BookingId, webhook.OrderId);
             }
-        }
+
         else if (isSuccess && payment.PaymentType == "Subscription" && payment.OwnerUpgradeRequestId.HasValue)
         {
             var upgradeRequest = await _ownerUpgradeRequestRepository.GetByIdAsync(payment.OwnerUpgradeRequestId.Value, ct);
@@ -359,6 +359,15 @@ public sealed class SePayService : ISePayService
         var qrData = $"bank://{_settings.Bank.Code}/{_settings.Bank.AccountNumber}?amount={amount}&memo={Uri.EscapeDataString(transferContent)}";
         var qrBytes = Encoding.UTF8.GetBytes(qrData);
         return Convert.ToBase64String(qrBytes);
+    }
+
+    private void ValidateSettings()
+    {
+        if (string.IsNullOrEmpty(_settings.ApiKey)) 
+            throw new InvalidOperationException("SePay ApiKey is configured incorrectly");
+            
+        if (string.IsNullOrEmpty(_settings.WebhookSecret))
+            throw new InvalidOperationException("SePay WebhookSecret is configured incorrectly");
     }
 
     /// <summary>

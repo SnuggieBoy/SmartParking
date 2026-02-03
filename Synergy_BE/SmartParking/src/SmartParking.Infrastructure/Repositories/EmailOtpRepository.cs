@@ -23,8 +23,9 @@ public sealed class EmailOtpRepository : IEmailOtpRepository
 
     public async Task<EmailOtp?> GetLatestUnusedByEmailAsync(string email, string? otpType = null, CancellationToken ct = default)
     {
+        var now = DateTime.UtcNow;
         var query = _context.EmailOtps
-            .Where(otp => otp.Email == email && !otp.IsUsed && otp.ExpiredAt > DateTime.UtcNow);
+            .Where(otp => otp.Email == email && !otp.IsUsed && otp.ExpiredAt > now);
         
         if (!string.IsNullOrEmpty(otpType))
         {

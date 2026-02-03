@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using SmartParking.Application.Common.Exceptions;
 using SmartParking.Application.DTOs.Auth;
 using SmartParking.Application.Interfaces.Repositories;
@@ -17,7 +18,9 @@ public sealed class AuthenticationService : IAuthenticationService
     private readonly IPasswordHasher _passwordHasher;
     private readonly IGoogleAuthService _googleAuthService;
     private readonly IEmailOtpRepository _emailOtpRepository;
+
     private readonly IEmailService _emailService;
+    private readonly ILogger<AuthenticationService> _logger;
     
     private const int OTP_LENGTH = 6;
     private const int OTP_EXPIRY_MINUTES = 5;
@@ -31,8 +34,10 @@ public sealed class AuthenticationService : IAuthenticationService
         IJwtTokenService jwtService,
         IPasswordHasher passwordHasher,
         IGoogleAuthService googleAuthService,
+
         IEmailOtpRepository emailOtpRepository,
-        IEmailService emailService)
+        IEmailService emailService,
+        ILogger<AuthenticationService> logger)
     {
         _userRepository = userRepository;
         _userAuthRepository = userAuthRepository;
@@ -42,7 +47,9 @@ public sealed class AuthenticationService : IAuthenticationService
         _passwordHasher = passwordHasher;
         _googleAuthService = googleAuthService;
         _emailOtpRepository = emailOtpRepository;
+
         _emailService = emailService;
+        _logger = logger;
     }
 
     #region OTP-based Registration Flow
@@ -388,8 +395,10 @@ public sealed class AuthenticationService : IAuthenticationService
 
     public async Task ForgotPasswordAsync(ForgotPasswordRequestDto request, CancellationToken ct = default)
     {
+        var email = request.Email.Trim();
+
         // Check if user exists
-        var user = await _userRepository.GetByEmailAsync(request.Email, ct);
+        var user = await _userRepository.GetByEmailAsync(email, ct);
         if (user == null)
         {
             throw new NotFoundException(Messages.Auth.PasswordResetUserNotFound);
@@ -403,7 +412,7 @@ public sealed class AuthenticationService : IAuthenticationService
 
         // Check for rate limiting (prevent OTP spam)
         var latestOtp = await _emailOtpRepository.GetLatestUnusedByEmailAsync(
-            request.Email, 
+            email, 
             Domain.Constants.OtpType.PasswordReset, 
             ct);
             
@@ -415,7 +424,7 @@ public sealed class AuthenticationService : IAuthenticationService
 
         // Invalidate all previous password reset OTPs for this email
         await _emailOtpRepository.InvalidateAllByEmailAsync(
-            request.Email, 
+            email, 
             Domain.Constants.OtpType.PasswordReset, 
             ct);
 
@@ -426,7 +435,7 @@ public sealed class AuthenticationService : IAuthenticationService
         var emailOtp = new EmailOtp
         {
             OtpId = Guid.NewGuid(),
-            Email = request.Email,
+            Email = email,
             OtpCode = otpCode,
             OtpType = Domain.Constants.OtpType.PasswordReset,
             ExpiredAt = DateTime.UtcNow.AddMinutes(OTP_EXPIRY_MINUTES),
@@ -437,31 +446,37 @@ public sealed class AuthenticationService : IAuthenticationService
         await _emailOtpRepository.CreateAsync(emailOtp, ct);
 
         // Send password reset OTP email
-        await _emailService.SendPasswordResetOtpAsync(request.Email, otpCode, user.FullName, ct);
+        await _emailService.SendPasswordResetOtpAsync(email, otpCode, user.FullName, ct);
     }
 
     public async Task ResetPasswordAsync(ResetPasswordRequestDto request, CancellationToken ct = default)
     {
+        var email = request.Email.Trim();
+        var otpCode = request.OtpCode.Trim();
+
         // Get latest unused password reset OTP for email
         var emailOtp = await _emailOtpRepository.GetLatestUnusedByEmailAsync(
-            request.Email, 
+            email, 
             Domain.Constants.OtpType.PasswordReset, 
             ct);
         
         if (emailOtp == null)
         {
+            _logger.LogWarning("ResetPassword failed: No active OTP found for email {Email}", email);
             throw new BadRequestException(Messages.Auth.InvalidPasswordResetOtp);
         }
 
-        // Check if OTP is expired
+        // Check if OTP is expired (redundant if repository filters, but good for safety)
         if (emailOtp.ExpiredAt < DateTime.UtcNow)
         {
+            _logger.LogWarning("ResetPassword failed: OTP expired for {Email}", email);
             throw new BadRequestException(Messages.Auth.OtpExpired);
         }
 
         // Verify OTP code
-        if (emailOtp.OtpCode != request.OtpCode)
+        if (emailOtp.OtpCode != otpCode)
         {
+            _logger.LogWarning("ResetPassword failed: Code mismatch. Expected {Expected}, Got {Received}", emailOtp.OtpCode, otpCode);
             throw new BadRequestException(Messages.Auth.InvalidPasswordResetOtp);
         }
 
@@ -475,7 +490,7 @@ public sealed class AuthenticationService : IAuthenticationService
         await _emailOtpRepository.MarkAsUsedAsync(emailOtp.OtpId, ct);
 
         // Get user
-        var user = await _userRepository.GetByEmailAsync(request.Email, ct);
+        var user = await _userRepository.GetByEmailAsync(email, ct);
         if (user == null)
         {
             throw new NotFoundException(Messages.Auth.UserNotFound);

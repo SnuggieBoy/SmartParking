@@ -79,7 +79,7 @@ public sealed class AdminService : IAdminService
 
         var dtos = items.Select(p => new TransactionDto(
             PaymentId: p.PaymentId,
-            BookingId: p.BookingId,
+            BookingId: p.BookingId ?? Guid.Empty,
             UserId: p.UserId,
             UserName: p.User?.FullName ?? "Unknown",
             UserEmail: p.User?.Email ?? "",
@@ -118,7 +118,7 @@ public sealed class AdminService : IAdminService
 
         return new TransactionDto(
             PaymentId: p.PaymentId,
-            BookingId: p.BookingId,
+            BookingId: p.BookingId ?? Guid.Empty,
             UserId: p.UserId,
             UserName: p.User?.FullName ?? "Unknown",
             UserEmail: p.User?.Email ?? "",

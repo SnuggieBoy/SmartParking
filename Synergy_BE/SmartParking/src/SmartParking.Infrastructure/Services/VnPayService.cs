@@ -16,6 +16,9 @@ namespace SmartParking.Infrastructure.Services;
 
 public sealed class VnPayService : IVnPayService
 {
+    private readonly VnPaySettings _settings;
+    private readonly IPaymentRepository _paymentRepository;
+    private readonly IBookingRepository _bookingRepository;
     private readonly IOwnerUpgradeRequestRepository _ownerUpgradeRequestRepository;
 
     public VnPayService(
@@ -205,8 +208,7 @@ public sealed class VnPayService : IVnPayService
         return isSuccess;
     }
 
-        return callback.vnp_ResponseCode == PaymentConstants.VnPayResponseCodes.Success;
-    }
+
 
     private static string HmacSHA512(string key, string data)
     {
