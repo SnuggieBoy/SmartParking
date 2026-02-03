@@ -126,14 +126,16 @@ public static class ServiceCollectionExtensions
                 policy.RequireRole(AuthConstants.Roles.User, AuthConstants.Roles.Admin));
         });
 
-        // CORS
+        // CORS - Allow localhost, ngrok, and any origin (development)
         services.AddCors(options =>
         {
             options.AddDefaultPolicy(builder =>
             {
-                builder.AllowAnyOrigin()
+                builder.SetIsOriginAllowed(origin => true) // Allow any origin in development
                        .AllowAnyMethod()
-                       .AllowAnyHeader();
+                       .AllowAnyHeader()
+                       .AllowCredentials() // Required for ngrok
+                       .WithExposedHeaders("*"); // Expose all headers
             });
         });
 
