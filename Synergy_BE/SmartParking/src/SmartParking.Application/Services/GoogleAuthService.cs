@@ -18,16 +18,19 @@ public sealed class GoogleAuthService : IGoogleAuthService
 
     public async Task<GoogleUserInfo?> ValidateGoogleTokenAsync(string googleToken, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(googleToken)) return null;
+
+        // Google tokeninfo: id_token= (from native SDK) hoặc access_token= (từ OAuth flow, e.g. Expo)
+        var isLikelyIdToken = googleToken.Contains('.') && googleToken.Count(c => c == '.') == 2;
+        var url = isLikelyIdToken
+            ? $"https://oauth2.googleapis.com/tokeninfo?id_token={Uri.EscapeDataString(googleToken)}"
+            : $"https://oauth2.googleapis.com/tokeninfo?access_token={Uri.EscapeDataString(googleToken)}";
+
         try
         {
-            var response = await _httpClient.GetFromJsonAsync<GoogleTokenInfoResponse>(
-                $"https://oauth2.googleapis.com/tokeninfo?id_token={googleToken}", ct);
-
+            var response = await _httpClient.GetFromJsonAsync<GoogleTokenInfoResponse>(url, ct);
             if (response == null || response.aud != _settings.ClientId)
-            {
                 return null;
-            }
-
             return new GoogleUserInfo(
                 Email: response.email ?? string.Empty,
                 Name: response.name ?? string.Empty,
@@ -36,7 +39,22 @@ public sealed class GoogleAuthService : IGoogleAuthService
         }
         catch
         {
-            return null;
+            if (isLikelyIdToken) return null;
+            try
+            {
+                var fallback = await _httpClient.GetFromJsonAsync<GoogleTokenInfoResponse>(
+                    $"https://oauth2.googleapis.com/tokeninfo?id_token={Uri.EscapeDataString(googleToken)}", ct);
+                if (fallback == null || fallback.aud != _settings.ClientId) return null;
+                return new GoogleUserInfo(
+                    Email: fallback.email ?? string.Empty,
+                    Name: fallback.name ?? string.Empty,
+                    GoogleUserId: fallback.sub ?? string.Empty
+                );
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 
