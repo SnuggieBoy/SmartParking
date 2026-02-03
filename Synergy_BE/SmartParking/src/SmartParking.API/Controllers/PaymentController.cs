@@ -61,6 +61,31 @@ public sealed class PaymentController : BaseApiController
     }
 
     /// <summary>
+    /// SECURITY: Only authenticated users can pay for their owner upgrade requests.
+    /// Ownership validated in service layer.
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
+    [HttpPost("owner-subscription/vnpay")]
+    [ProducesResponseType(typeof(ApiResponse<PaymentResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<PaymentResponseDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<PaymentResponseDto>), StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ApiResponse<PaymentResponseDto>>> CreateOwnerSubscriptionPayment(
+        [FromBody] CreateOwnerSubscriptionPaymentRequest request,
+        CancellationToken ct)
+    {
+        var userId = GetUserIdFromToken();
+
+        var dto = new CreateOwnerSubscriptionPaymentDto(
+            request.OwnerUpgradeRequestId,
+            request.PlanType,
+            request.Description
+        );
+
+        var response = await _vnPayService.CreateOwnerSubscriptionPaymentUrlAsync(dto, userId, ct);
+        return Ok(ApiResponse<PaymentResponseDto>.SuccessResponse(response, "Owner subscription payment URL created"));
+    }
+
+    /// <summary>
     /// VNPAY CALLBACK: Public endpoint called by VNPay after payment.
     /// SECURITY CRITICAL:
     /// - [AllowAnonymous] required (VNPay cannot send JWT)
@@ -134,6 +159,31 @@ public sealed class PaymentController : BaseApiController
         var userId = GetUserIdFromToken();
         var response = await _sePayService.CreatePaymentAsync(request, userId, ct);
         return Ok(ApiResponse<SePayPaymentResponseDto>.SuccessResponse(response, "SePay payment created successfully"));
+    }
+
+    /// <summary>
+    /// SEPAY: Create owner subscription payment with bank transfer QR code.
+    /// SECURITY: Only authenticated users can pay for their owner upgrade requests.
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
+    [HttpPost("owner-subscription/sepay")]
+    [ProducesResponseType(typeof(ApiResponse<SePayPaymentResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<SePayPaymentResponseDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<SePayPaymentResponseDto>), StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ApiResponse<SePayPaymentResponseDto>>> CreateOwnerSubscriptionSePayPayment(
+        [FromBody] CreateOwnerSubscriptionPaymentRequest request,
+        CancellationToken ct)
+    {
+        var userId = GetUserIdFromToken();
+
+        var dto = new CreateOwnerSubscriptionPaymentDto(
+            request.OwnerUpgradeRequestId,
+            request.PlanType,
+            request.Description
+        );
+
+        var response = await _sePayService.CreateOwnerSubscriptionPaymentAsync(dto, userId, ct);
+        return Ok(ApiResponse<SePayPaymentResponseDto>.SuccessResponse(response, "Owner subscription SePay payment created"));
     }
 
     /// <summary>

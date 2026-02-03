@@ -1,0 +1,567 @@
+{
+    "info": {
+        "_postman_id": "smartparking-api-collection",
+        "name": "SmartParking API",
+        "description": "Comprehensive API collection for SmartParking project including User, Owner, and Admin flows.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "1. Authentication",
+            "item": [
+                {
+                    "name": "Register User",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"email\": \"driver@example.com\",\n    \"password\": \"Password123!\",\n    \"fullName\": \"John Driver\",\n    \"phone\": \"0123456789\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/auth/register",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "auth",
+                                "register"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Login User",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "if (pm.response.code === 200 && jsonData.data && jsonData.data.accessToken) {",
+                                    "    pm.collectionVariables.set(\"bearerToken\", jsonData.data.accessToken);",
+                                    "    pm.collectionVariables.set(\"userId\", jsonData.data.user.userId);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"email\": \"driver@example.com\",\n    \"password\": \"Password123!\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/auth/login",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "auth",
+                                "login"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Google Login (Mock)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"tokenId\": \"GOOGLE_ID_TOKEN_HERE\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/auth/google-login",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "auth",
+                                "google-login"
+                            ]
+                        }
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "2. Driver Flow",
+            "item": [
+                {
+                    "name": "Vehicles",
+                    "item": [
+                        {
+                            "name": "Get My Vehicles",
+                            "request": {
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/vehicles/my-vehicles",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "vehicles",
+                                        "my-vehicles"
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Add Vehicle",
+                            "event": [
+                                {
+                                    "listen": "test",
+                                    "script": {
+                                        "exec": [
+                                            "var jsonData = pm.response.json();",
+                                            "if (jsonData.data && jsonData.data.vehicleId) {",
+                                            "    pm.collectionVariables.set(\"vehicleId\", jsonData.data.vehicleId);",
+                                            "}"
+                                        ],
+                                        "type": "text/javascript"
+                                    }
+                                }
+                            ],
+                            "request": {
+                                "method": "POST",
+                                "header": [],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"licensePlate\": \"29A-{{$randomInt}}88\",\n    \"brand\": \"Honda\",\n    \"model\": \"Civic\",\n    \"color\": \"Black\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                },
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/vehicles",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "vehicles"
+                                    ]
+                                }
+                            },
+                            "response": []
+                        }
+                    ]
+                },
+                {
+                    "name": "Booking",
+                    "item": [
+                        {
+                            "name": "Search Parking Lots",
+                            "event": [
+                                {
+                                    "listen": "test",
+                                    "script": {
+                                        "exec": [
+                                            "var jsonData = pm.response.json();",
+                                            "if (jsonData.data && jsonData.data.items && jsonData.data.items.length > 0) {",
+                                            "    pm.collectionVariables.set(\"parkingLotId\", jsonData.data.items[0].parkingLotId);",
+                                            "}"
+                                        ],
+                                        "type": "text/javascript"
+                                    }
+                                }
+                            ],
+                            "request": {
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/parkinglots/search?province=Hà Nội&page=1&pageSize=10",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "parkinglots",
+                                        "search"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "province",
+                                            "value": "Hà Nội"
+                                        },
+                                        {
+                                            "key": "page",
+                                            "value": "1"
+                                        },
+                                        {
+                                            "key": "pageSize",
+                                            "value": "10"
+                                        }
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Create Booking",
+                            "event": [
+                                {
+                                    "listen": "test",
+                                    "script": {
+                                        "exec": [
+                                            "var jsonData = pm.response.json();",
+                                            "if (jsonData.data && jsonData.data.bookingId) {",
+                                            "    pm.collectionVariables.set(\"bookingId\", jsonData.data.bookingId);",
+                                            "    pm.collectionVariables.set(\"totalAmount\", jsonData.data.totalAmount);",
+                                            "}"
+                                        ],
+                                        "type": "text/javascript"
+                                    }
+                                }
+                            ],
+                            "request": {
+                                "method": "POST",
+                                "header": [],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"parkingLotId\": \"{{parkingLotId}}\",\n    \"vehicleId\": \"{{vehicleId}}\",\n    \"startTime\": \"{{$isoTimestamp}}\",\n    \"endTime\": \"{{$isoTimestamp}}\" \n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                },
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/bookings",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "bookings"
+                                    ]
+                                }
+                            },
+                            "response": []
+                        }
+                    ]
+                },
+                {
+                    "name": "Payment",
+                    "item": [
+                        {
+                            "name": "Create VNPay URL (Booking)",
+                            "request": {
+                                "method": "POST",
+                                "header": [],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"bookingId\": \"{{bookingId}}\",\n    \"amount\": {{totalAmount}},\n    \"description\": \"Payment for Booking {{bookingId}}\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                },
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/payments/create",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "payments",
+                                        "create"
+                                    ]
+                                }
+                            },
+                            "response": []
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "3. Owner Flow",
+            "item": [
+                {
+                    "name": "Upgrade to Owner",
+                    "item": [
+                        {
+                            "name": "Get Plans",
+                            "request": {
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/owners/plans",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "owners",
+                                        "plans"
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Create Upgrade Request",
+                            "event": [
+                                {
+                                    "listen": "test",
+                                    "script": {
+                                        "exec": [
+                                            "var jsonData = pm.response.json();",
+                                            "if (jsonData.data && jsonData.data.requestId) {",
+                                            "    pm.collectionVariables.set(\"upgradeRequestId\", jsonData.data.requestId);",
+                                            "    pm.collectionVariables.set(\"feeAmount\", jsonData.data.feeAmount);",
+                                            "}"
+                                        ],
+                                        "type": "text/javascript"
+                                    }
+                                }
+                            ],
+                            "request": {
+                                "method": "POST",
+                                "header": [],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"parkingLotName\": \"My Private Parking\",\n    \"parkingLotAddress\": \"123 Owner St, District 1, HCM\",\n    \"latitude\": 10.7769,\n    \"longitude\": 106.7009,\n    \"planType\": \"Monthly\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                },
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/owners/upgrade-request",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "owners",
+                                        "upgrade-request"
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Pay Subscription (VNPay)",
+                            "request": {
+                                "method": "POST",
+                                "header": [],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"ownerUpgradeRequestId\": \"{{upgradeRequestId}}\",\n    \"planType\": \"Monthly\",\n    \"description\": \"Subscription payment for Owner Upgrade\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                },
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/payments/owner-subscription/vnpay",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "payments",
+                                        "owner-subscription",
+                                        "vnpay"
+                                    ]
+                                }
+                            },
+                            "response": []
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "4. Admin Flow",
+            "item": [
+                {
+                    "name": "Dashboard Stats",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/admin/dashboard/stats",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "admin",
+                                "dashboard",
+                                "stats"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Manage Upgrade Requests",
+                    "item": [
+                        {
+                            "name": "Get All Upgrade Requests",
+                            "request": {
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/admin/owners/upgrade-requests?status=PendingApproval",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "admin",
+                                        "owners",
+                                        "upgrade-requests"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "status",
+                                            "value": "PendingApproval"
+                                        }
+                                    ]
+                                }
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Approve Request",
+                            "request": {
+                                "method": "POST",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/admin/owners/upgrade-requests/{{upgradeRequestId}}/approve",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "admin",
+                                        "owners",
+                                        "upgrade-requests",
+                                        "{{upgradeRequestId}}",
+                                        "approve"
+                                    ]
+                                }
+                            },
+                            "response": []
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "auth": {
+        "type": "bearer",
+        "bearer": [
+            {
+                "key": "token",
+                "value": "{{bearerToken}}",
+                "type": "string"
+            }
+        ]
+    },
+    "event": [
+        {
+            "listen": "prerequest",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    ""
+                ]
+            }
+        },
+        {
+            "listen": "test",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    ""
+                ]
+            }
+        }
+    ],
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:5000",
+            "type": "string"
+        },
+        {
+            "key": "bearerToken",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "userId",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "vehicleId",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "parkingLotId",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "bookingId",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "totalAmount",
+            "value": "0",
+            "type": "string"
+        },
+        {
+            "key": "upgradeRequestId",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "feeAmount",
+            "value": "0",
+            "type": "string"
+        }
+    ]
+}

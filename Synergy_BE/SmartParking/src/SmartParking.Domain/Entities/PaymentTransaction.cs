@@ -9,7 +9,8 @@ public partial class PaymentTransaction
 {
     public Guid PaymentId { get; set; }
 
-    public Guid BookingId { get; set; }
+    public Guid? BookingId { get; set; }
+    public Guid? OwnerUpgradeRequestId { get; set; }
 
     public Guid UserId { get; set; }
 
@@ -18,6 +19,8 @@ public partial class PaymentTransaction
     public string PaymentMethod { get; set; } = "VNPay";
 
     public string PaymentStatus { get; set; } = "Pending";
+
+    public string PaymentType { get; set; } = "Booking";
 
     public string VnpTxnRef { get; set; } = null!;
 
@@ -71,7 +74,9 @@ public partial class PaymentTransaction
     public Guid? DeletedBy { get; set; }
 
     // Navigation properties
-    public virtual Booking Booking { get; set; } = null!;
+    public virtual Booking? Booking { get; set; }
+
+    public virtual OwnerUpgradeRequest? OwnerUpgradeRequest { get; set; }
 
     public virtual ICollection<PaymentLog> PaymentLogs { get; set; } = new List<PaymentLog>();
 

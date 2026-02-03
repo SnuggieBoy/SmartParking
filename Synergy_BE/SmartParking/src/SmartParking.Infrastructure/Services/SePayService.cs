@@ -17,17 +17,20 @@ public sealed class SePayService : ISePayService
 {
     private readonly IPaymentRepository _paymentRepository;
     private readonly IBookingRepository _bookingRepository;
+    private readonly IOwnerUpgradeRequestRepository _ownerUpgradeRequestRepository;
     private readonly ILogger<SePayService> _logger;
     private readonly SePaySettings _settings;
 
     public SePayService(
         IPaymentRepository paymentRepository,
         IBookingRepository bookingRepository,
+        IOwnerUpgradeRequestRepository ownerUpgradeRequestRepository,
         IConfiguration configuration,
         ILogger<SePayService> logger)
     {
         _paymentRepository = paymentRepository;
         _bookingRepository = bookingRepository;
+        _ownerUpgradeRequestRepository = ownerUpgradeRequestRepository;
         _logger = logger;
         _settings = configuration.GetSection("SePay").Get<SePaySettings>() 
             ?? throw new InvalidOperationException("SePay configuration is missing");
@@ -43,55 +46,6 @@ public sealed class SePayService : ISePayService
 
         // Validate critical settings
         ValidateSettings();
-    }
-
-    /// <summary>
-    /// Validates SePay settings at startup (fail-fast)
-    /// </summary>
-    private void ValidateSettings()
-    {
-        var errors = new List<string>();
-
-        if (!_settings.Enabled)
-        {
-            _logger.LogWarning("SePay is disabled in configuration");
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(_settings.MerchantId))
-            errors.Add("MerchantId is required");
-
-        if (string.IsNullOrWhiteSpace(_settings.ApiKey))
-            errors.Add("ApiKey is required (set via appsettings or SEPAY_API_KEY env var)");
-
-        if (string.IsNullOrWhiteSpace(_settings.WebhookSecret))
-            errors.Add("WebhookSecret is required (set via appsettings or SEPAY_WEBHOOK_SECRET env var)");
-
-        if (string.IsNullOrWhiteSpace(_settings.Bank.Code))
-            errors.Add("Bank.Code is required");
-
-        if (string.IsNullOrWhiteSpace(_settings.Bank.AccountNumber))
-            errors.Add("Bank.AccountNumber is required");
-
-        if (string.IsNullOrWhiteSpace(_settings.Bank.AccountName))
-            errors.Add("Bank.AccountName is required");
-
-        if (string.IsNullOrWhiteSpace(_settings.Urls.WebhookUrl))
-            errors.Add("Urls.WebhookUrl is required");
-
-        if (_settings.WebhookSecret.Length < 32)
-            errors.Add("WebhookSecret must be at least 32 characters for security");
-
-        if (errors.Any())
-        {
-            var errorMessage = $"SePay configuration validation failed:\n- {string.Join("\n- ", errors)}";
-            _logger.LogError(errorMessage);
-            throw new InvalidOperationException(errorMessage);
-        }
-
-        _logger.LogInformation(
-            "SePay configuration validated successfully. MerchantId: {MerchantId}, Bank: {BankCode}",
-            _settings.MerchantId, _settings.Bank.Code);
     }
 
     public async Task<SePayPaymentResponseDto> CreatePaymentAsync(
@@ -130,6 +84,7 @@ public sealed class SePayService : ISePayService
             Amount = request.Amount,
             PaymentMethod = PaymentConstants.SePayProvider,
             PaymentStatus = nameof(PaymentStatus.Pending),
+            PaymentType = "Booking",
             VnpTxnRef = orderId, // Reuse this field for transaction reference
             SePayOrderId = orderId,
             SePayTransferContent = transferContent,
@@ -162,6 +117,69 @@ public sealed class SePayService : ISePayService
             AccountName: _settings.Bank.AccountName,
             TransferContent: transferContent,
             Amount: request.Amount,
+            Status: nameof(PaymentStatus.Pending)
+        );
+    }
+
+    public async Task<SePayPaymentResponseDto> CreateOwnerSubscriptionPaymentAsync(
+        CreateOwnerSubscriptionPaymentDto request,
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        var upgradeRequest = await _ownerUpgradeRequestRepository.GetByIdAsync(request.OwnerUpgradeRequestId, ct);
+        if (upgradeRequest == null)
+        {
+            throw new NotFoundException("Owner upgrade request not found.");
+        }
+
+        if (upgradeRequest.UserId != userId)
+        {
+            throw new ForbiddenException(Messages.Common.Forbidden);
+        }
+
+        var orderId = GenerateOrderId();
+        var transferContent = GenerateTransferContent(orderId);
+
+        var payment = new PaymentTransaction
+        {
+            PaymentId = Guid.NewGuid(),
+            OwnerUpgradeRequestId = request.OwnerUpgradeRequestId,
+            UserId = userId,
+            Amount = upgradeRequest.FeeAmount,
+            PaymentMethod = PaymentConstants.SePayProvider,
+            PaymentStatus = nameof(PaymentStatus.Pending),
+            PaymentType = "Subscription",
+            VnpTxnRef = orderId,
+            SePayOrderId = orderId,
+            SePayTransferContent = transferContent,
+            SePayBankCode = _settings.Bank.Code,
+            SePayBankAccount = _settings.Bank.AccountNumber,
+            Metadata = JsonSerializer.Serialize(new
+            {
+                Description = request.Description ?? $"Owner Subscription ({upgradeRequest.PlanType})",
+                CreatedBy = userId
+            }),
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = userId,
+            IsDeleted = false
+        };
+
+        await _paymentRepository.CreateAsync(payment, ct);
+
+        var qrCode = GenerateQrCode(orderId, upgradeRequest.FeeAmount, transferContent);
+
+        _logger.LogInformation(
+            "SePay subscription payment created. OrderId: {OrderId}, RequestId: {RequestId}, Amount: {Amount}",
+            orderId, request.OwnerUpgradeRequestId, upgradeRequest.FeeAmount);
+
+        return new SePayPaymentResponseDto(
+            OrderId: orderId,
+            QrCodeBase64: qrCode,
+            BankCode: _settings.Bank.Code,
+            BankAccount: _settings.Bank.AccountNumber,
+            AccountName: _settings.Bank.AccountName,
+            TransferContent: transferContent,
+            Amount: upgradeRequest.FeeAmount,
             Status: nameof(PaymentStatus.Pending)
         );
     }
@@ -279,15 +297,23 @@ public sealed class SePayService : ISePayService
         if (isSuccess)
         {
             var booking = await _bookingRepository.GetByIdAsync(payment.BookingId, includeDeleted: false, ct);
-            if (booking != null && booking.Status == nameof(BookingStatus.Pending))
-            {
-                booking.Status = nameof(BookingStatus.Confirmed);
-                booking.UpdatedAt = DateTime.UtcNow;
-                await _bookingRepository.UpdateAsync(booking, ct);
-
                 _logger.LogInformation(
                     "Booking confirmed via SePay. BookingId: {BookingId}, OrderId: {OrderId}",
                     booking.BookingId, webhook.OrderId);
+            }
+        }
+        else if (isSuccess && payment.PaymentType == "Subscription" && payment.OwnerUpgradeRequestId.HasValue)
+        {
+            var upgradeRequest = await _ownerUpgradeRequestRepository.GetByIdAsync(payment.OwnerUpgradeRequestId.Value, ct);
+            if (upgradeRequest != null && upgradeRequest.Status == "Pending")
+            {
+                upgradeRequest.Status = "PendingApproval";
+                upgradeRequest.PaymentTransactionId = payment.PaymentId;
+                await _ownerUpgradeRequestRepository.UpdateAsync(upgradeRequest, ct);
+
+                _logger.LogInformation(
+                    "Owner upgrade request moved to PendingApproval via SePay. RequestId: {RequestId}, OrderId: {OrderId}",
+                    upgradeRequest.RequestId, webhook.OrderId);
             }
         }
 

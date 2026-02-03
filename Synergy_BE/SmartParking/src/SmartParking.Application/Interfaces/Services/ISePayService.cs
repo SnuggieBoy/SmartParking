@@ -15,6 +15,11 @@ public interface ISePayService
         Guid userId,
         CancellationToken ct = default);
 
+    Task<SePayPaymentResponseDto> CreateOwnerSubscriptionPaymentAsync(
+        CreateOwnerSubscriptionPaymentDto request,
+        Guid userId,
+        CancellationToken ct = default);
+
     /// <summary>
     /// Processes SePay webhook callback
     /// SECURITY: Verifies webhook signature before processing

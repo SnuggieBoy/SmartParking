@@ -292,11 +292,21 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
                 .HasDatabaseName("IX_PaymentTransactions_UserId_IsDeleted")
                 .HasFilter("[IsDeleted] = 0");
 
+            entity.Property(e => e.PaymentType)
+                .IsRequired()
+                .HasMaxLength(20)
+                .HasDefaultValue("Booking");
+
             // Relationships
             entity.HasOne(d => d.Booking).WithMany(p => p.PaymentTransactions)
                 .HasForeignKey(d => d.BookingId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__PaymentTr__Booki__75A278F5");
+
+            entity.HasOne(d => d.OwnerUpgradeRequest).WithMany(p => p.PaymentTransactions)
+                .HasForeignKey(d => d.OwnerUpgradeRequestId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_PaymentTransactions_OwnerUpgradeRequests");
 
             entity.HasOne(d => d.User).WithMany(p => p.PaymentTransactions)
                 .HasForeignKey(d => d.UserId)

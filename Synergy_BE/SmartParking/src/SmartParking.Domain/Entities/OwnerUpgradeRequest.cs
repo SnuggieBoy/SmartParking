@@ -44,5 +44,6 @@ public partial class OwnerUpgradeRequest
     public Guid? ProcessedBy { get; set; }
 
     public virtual User User { get; set; } = null!;
+    public virtual ICollection<PaymentTransaction> PaymentTransactions { get; set; } = new List<PaymentTransaction>();
 }
 
