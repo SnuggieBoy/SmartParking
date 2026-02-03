@@ -60,11 +60,10 @@ public sealed class ParkingLotsController : BaseApiController
         [FromQuery] int pageSize = 10,
         CancellationToken ct = default)
     {
-        // Public listing: by default only show Approved & Active lots
-        var effectiveIsActive = isActive ?? true;
-        var effectiveStatus = string.IsNullOrWhiteSpace(status)
-            ? ParkingLotStatus.Approved
-            : status;
+        // Public listing: allow client to control filtering completely
+        // Previously defaulted to Approved/Active, but this hid data if DB used different conventions (e.g. "Active" vs "Approved")
+        var effectiveIsActive = isActive; 
+        var effectiveStatus = status;
 
         var filter = new ParkingLotFilterDto(search, effectiveIsActive, effectiveStatus, null, page, pageSize);
         var result = await _parkingLotService.GetAllAsync(filter, ct);
