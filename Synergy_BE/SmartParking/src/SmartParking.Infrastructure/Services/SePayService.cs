@@ -297,10 +297,13 @@ public sealed class SePayService : ISePayService
         if (isSuccess && payment.BookingId.HasValue)
         {
             var booking = await _bookingRepository.GetByIdAsync(payment.BookingId.Value, includeDeleted: false, ct);
+            if (booking != null)
+            {
                 _logger.LogInformation(
                     "Booking confirmed via SePay. BookingId: {BookingId}, OrderId: {OrderId}",
                     booking.BookingId, webhook.OrderId);
             }
+        }
 
         else if (isSuccess && payment.PaymentType == "Subscription" && payment.OwnerUpgradeRequestId.HasValue)
         {

@@ -194,6 +194,10 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
             entity.Property(e => e.PricePerHour)
                 .HasColumnType("decimal(10, 2)")
                 .IsRequired();
+            entity.Property(e => e.Latitude)
+                .HasPrecision(18, 10);
+            entity.Property(e => e.Longitude)
+                .HasPrecision(18, 10);
             entity.Property(e => e.Status)
                 .IsRequired()
                 .HasMaxLength(20)
@@ -482,6 +486,10 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
             entity.Property(e => e.ParkingLotAddress).HasMaxLength(255);
             entity.Property(e => e.PlanType).HasMaxLength(50);
             entity.Property(e => e.FeeAmount).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.Latitude)
+                .HasPrecision(18, 10);
+            entity.Property(e => e.Longitude)
+                .HasPrecision(18, 10);
             entity.Property(e => e.Status).HasMaxLength(50);
             entity.Property(e => e.RejectReason).HasMaxLength(500);
 

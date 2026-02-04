@@ -185,7 +185,7 @@ public sealed class DashboardService : IDashboardService
         var recentPayments = await _context.PaymentTransactions
             .Include(p => p.User)
             .Include(p => p.Booking)
-            .ThenInclude(b => b.ParkingLot)
+                .ThenInclude(b => b!.ParkingLot)
             .Where(p => p.PaymentStatus == "Success" && !p.IsDeleted)
             .OrderByDescending(p => p.CreatedAt)
             .Take(limit)
