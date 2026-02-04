@@ -39,7 +39,7 @@ public sealed class PaymentController : BaseApiController
     /// SECURITY: Only authenticated users can create payments for their own bookings.
     /// Ownership validated in service layer.
     /// </summary>
-    [Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
+    [Authorize(Policy = AuthorizationPolicies.UserOrOwnerOrAdmin)]
     [HttpPost("create")]
     [ProducesResponseType(typeof(ApiResponse<PaymentResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<PaymentResponseDto>), StatusCodes.Status400BadRequest)]
@@ -64,7 +64,7 @@ public sealed class PaymentController : BaseApiController
     /// SECURITY: Only authenticated users can pay for their owner upgrade requests.
     /// Ownership validated in service layer.
     /// </summary>
-    [Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
+    [Authorize(Policy = AuthorizationPolicies.UserOrOwnerOrAdmin)]
     [HttpPost("owner-subscription/vnpay")]
     [ProducesResponseType(typeof(ApiResponse<PaymentResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<PaymentResponseDto>), StatusCodes.Status400BadRequest)]
@@ -112,7 +112,7 @@ public sealed class PaymentController : BaseApiController
     /// SECURITY: Only booking owner OR Admin can query payment status.
     /// Ownership validated in service layer.
     /// </summary>
-    [Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
+    [Authorize(Policy = AuthorizationPolicies.UserOrOwnerOrAdmin)]
     [HttpGet("booking/{bookingId:guid}")]
     [ProducesResponseType(typeof(ApiResponse<PaymentStatusDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<PaymentStatusDto>), StatusCodes.Status403Forbidden)]
@@ -128,7 +128,7 @@ public sealed class PaymentController : BaseApiController
     /// <summary>
     /// Get payment history for current user
     /// </summary>
-    [Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
+    [Authorize(Policy = AuthorizationPolicies.UserOrOwnerOrAdmin)]
     [HttpGet("history")]
     [ProducesResponseType(typeof(ApiResponse<PagedResult<PaymentHistoryDto>>), StatusCodes.Status200OK)]
     public async Task<ActionResult<ApiResponse<PagedResult<PaymentHistoryDto>>>> GetPaymentHistory(
@@ -147,7 +147,7 @@ public sealed class PaymentController : BaseApiController
     /// SEPAY: Create payment with bank transfer QR code.
     /// SECURITY: Only authenticated users can create payments for their own bookings.
     /// </summary>
-    [Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
+    [Authorize(Policy = AuthorizationPolicies.UserOrOwnerOrAdmin)]
     [HttpPost("sepay/create")]
     [ProducesResponseType(typeof(ApiResponse<SePayPaymentResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<SePayPaymentResponseDto>), StatusCodes.Status400BadRequest)]
@@ -165,7 +165,7 @@ public sealed class PaymentController : BaseApiController
     /// SEPAY: Create owner subscription payment with bank transfer QR code.
     /// SECURITY: Only authenticated users can pay for their owner upgrade requests.
     /// </summary>
-    [Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
+    [Authorize(Policy = AuthorizationPolicies.UserOrOwnerOrAdmin)]
     [HttpPost("owner-subscription/sepay")]
     [ProducesResponseType(typeof(ApiResponse<SePayPaymentResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<SePayPaymentResponseDto>), StatusCodes.Status400BadRequest)]

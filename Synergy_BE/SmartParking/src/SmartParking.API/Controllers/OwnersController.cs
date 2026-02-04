@@ -51,7 +51,8 @@ public sealed class OwnersController : BaseApiController
             ParkingLotAddress: model.ParkingLotAddress,
             Latitude: model.Latitude,
             Longitude: model.Longitude,
-            PlanType: model.PlanType);
+            PlanType: model.PlanType,
+            PaymentTransactionId: model.PaymentTransactionId);
 
         var result = await _ownerUpgradeService.CreateRequestAsync(userId, dto, ct);
 

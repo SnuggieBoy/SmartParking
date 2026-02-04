@@ -38,14 +38,14 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
         {
             new OwnerPlanDto(
                 PlanType: "Monthly",
-                MonthlyFee: _settings.MonthlyFee,
-                YearlyFee: _settings.YearlyFee,
-                Description: "Owner subscription billed monthly."),
+                MonthlyFee: 100000m,
+                YearlyFee: 0m,
+                Description: "Owner subscription billed monthly - 100,000 VND / month"),
             new OwnerPlanDto(
                 PlanType: "Yearly",
-                MonthlyFee: _settings.MonthlyFee,
-                YearlyFee: _settings.YearlyFee,
-                Description: "Owner subscription billed yearly (recommended).")
+                MonthlyFee: 0m,
+                YearlyFee: 1000000m,
+                Description: "Owner subscription billed yearly (recommended) - 1,000,000 VND / year")
         }.AsEnumerable();
 
         return Task.FromResult(plans);
@@ -74,8 +74,13 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
 
         var planType = request.PlanType?.Trim() ?? "Monthly";
         var fee = planType.Equals("Yearly", StringComparison.OrdinalIgnoreCase)
-            ? _settings.YearlyFee
-            : _settings.MonthlyFee;
+            ? 1000000m
+            : 100000m;
+
+        if (request.PaymentTransactionId == null)
+        {
+            throw new BadRequestException("Payment transaction is required before creating an upgrade request.");
+        }
 
         var entity = new OwnerUpgradeRequest
         {
@@ -92,7 +97,7 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
             FeeAmount = fee,
             Status = "Pending",
             RejectReason = null,
-            PaymentTransactionId = null,
+            PaymentTransactionId = request.PaymentTransactionId,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -150,6 +155,9 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
         entity.Status = "Approved";
         entity.ApprovedAt = DateTime.UtcNow;
         entity.ProcessedBy = adminId;
+        
+        // Prevent EF Core tracking conflict (since we have another tracked User instance)
+        entity.User = null!;
 
         await _requestRepository.UpdateAsync(entity, ct);
 
@@ -200,7 +208,8 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
             RejectReason: entity.RejectReason,
             CreatedAt: entity.CreatedAt,
             ApprovedAt: entity.ApprovedAt,
-            RejectedAt: entity.RejectedAt);
+            RejectedAt: entity.RejectedAt,
+            PaymentTransactionId: entity.PaymentTransactionId);
     }
 }
 

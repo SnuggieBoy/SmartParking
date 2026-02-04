@@ -19,7 +19,8 @@ public sealed record CreateOwnerUpgradeRequestDto(
     string ParkingLotAddress,
     decimal? Latitude,
     decimal? Longitude,
-    string PlanType);
+    string PlanType,
+    Guid? PaymentTransactionId);
 
 /// <summary>
 /// Lightweight filter for admin listing of owner upgrade requests.
@@ -48,7 +49,8 @@ public sealed record OwnerUpgradeRequestResponseDto(
     string? RejectReason,
     DateTime CreatedAt,
     DateTime? ApprovedAt,
-    DateTime? RejectedAt);
+    DateTime? RejectedAt,
+    Guid? PaymentTransactionId);
 
 /// <summary>
 /// DTO for rejecting an owner upgrade request.

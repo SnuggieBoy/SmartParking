@@ -516,4 +516,89 @@ public sealed class BookingService : IBookingService
         booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
         return MapToDto(booking!);
     }
+    public async Task<PagedResult<ParkingLotBookingDto>> GetOwnerBookingsAsync(
+        Guid ownerId,
+        string? status,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var pagedResult = await _bookingRepository.GetByOwnerIdAsync(ownerId, status, page, pageSize, ct);
+
+        var dtos = pagedResult.Items
+            .Select(b => new ParkingLotBookingDto(
+                b.BookingId,
+                b.User?.FullName ?? string.Empty,
+                b.Vehicle?.LicensePlate,
+                b.Status,
+                b.StartTime,
+                b.EndTime,
+                b.CheckInTime,
+                b.CheckOutTime,
+                b.TotalAmount
+            ))
+            .ToList();
+
+        return new PagedResult<ParkingLotBookingDto>(dtos, pagedResult.Page, pagedResult.PageSize, pagedResult.TotalCount);
+    }
+
+    public async Task<BookingDto> ApproveBookingAsync(Guid bookingId, Guid ownerId, CancellationToken ct = default)
+    {
+        var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
+        if (booking == null)
+        {
+            throw new NotFoundException(Messages.Booking.NotFound);
+        }
+
+        // Validate Owner
+        if (booking.ParkingLot?.OwnerId != ownerId)
+        {
+            throw new ForbiddenException();
+        }
+
+        if (booking.Status != nameof(BookingStatus.Pending))
+        {
+            throw new BadRequestException("Only pending bookings can be approved.");
+        }
+
+        booking.Status = nameof(BookingStatus.Confirmed);
+        booking.UpdatedAt = DateTime.UtcNow;
+
+        await _bookingRepository.UpdateAsync(booking, ct);
+
+        // Reload to ensure updated data
+        return MapToDto(booking);
+    }
+
+    public async Task RejectBookingAsync(Guid bookingId, Guid ownerId, string reason, CancellationToken ct = default)
+    {
+        var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
+        if (booking == null)
+        {
+            throw new NotFoundException(Messages.Booking.NotFound);
+        }
+
+        // Validate Owner
+        if (booking.ParkingLot?.OwnerId != ownerId)
+        {
+            throw new ForbiddenException();
+        }
+
+        if (booking.Status != nameof(BookingStatus.Pending) && booking.Status != nameof(BookingStatus.Confirmed))
+        {
+             throw new BadRequestException("Cannot reject completed or cancelled bookings.");
+        }
+
+        booking.Status = nameof(BookingStatus.Cancelled);
+        booking.UpdatedAt = DateTime.UtcNow;
+        // Note: Booking entity doesn't have RejectReason, so we just Cancel.
+
+        await _bookingRepository.UpdateAsync(booking, ct);
+        
+        // Update occupancy (if it was confirmed/active, need to free up checking logic? Pending bookings reserved a slot?)
+        // CreateAsync updates occupancy +1 (Line 116).
+        // CheckOut/Cancel updates occupancy -1.
+        // So yes, we MUST decrease occupancy.
+        await _parkingLotRepository.UpdateOccupancyAsync(booking.ParkingLotId, -1, ct);
+    }
 }

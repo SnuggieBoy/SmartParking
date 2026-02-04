@@ -14,7 +14,7 @@ namespace SmartParking.API.Controllers;
 /// Vehicle management endpoints for authenticated users.
 /// Security: Only User (Driver) role can manage vehicles. Admin has full access.
 /// </summary>
-[Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
+[Authorize(Policy = AuthorizationPolicies.UserOrOwnerOrAdmin)]
 [Route("api/vehicles")]
 public sealed class VehiclesController : BaseApiController
 {

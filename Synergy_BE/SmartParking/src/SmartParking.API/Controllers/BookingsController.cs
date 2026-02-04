@@ -15,7 +15,7 @@ namespace SmartParking.API.Controllers;
 /// Booking management endpoints.
 /// Security: Users manage own bookings. Admin has full access.
 /// </summary>
-[Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
+[Authorize(Policy = AuthorizationPolicies.UserOrOwnerOrAdmin)]
 [Route("api/bookings")]
 public sealed class BookingsController : BaseApiController
 {
@@ -176,4 +176,60 @@ public sealed class BookingsController : BaseApiController
         var booking = await _bookingService.ExtendBookingAsync(id, request.NewEndTime, userId, ct);
         return Ok(ApiResponse<BookingDto>.SuccessResponse(booking, "Booking extended successfully"));
     }
+    /// <summary>
+    /// OWNER: Get all bookings for all my parking lots
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.OwnerOrAdmin)]
+    [HttpGet("owner/my-bookings")]
+    [ProducesResponseType(typeof(ApiResponse<PagedResult<ParkingLotBookingDto>>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<PagedResult<ParkingLotBookingDto>>>> GetOwnerBookings(
+        [FromQuery] string? status,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken ct = default)
+    {
+        var userId = GetUserIdFromToken();
+        var result = await _bookingService.GetOwnerBookingsAsync(userId, status, page, pageSize, ct);
+        return Ok(ApiResponse<PagedResult<ParkingLotBookingDto>>.SuccessResponse(result, "Owner bookings retrieved successfully"));
+    }
+
+    /// <summary>
+    /// OWNER: Approve a pending booking
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.OwnerOrAdmin)]
+    [HttpPost("{id:guid}/approve")]
+    [ProducesResponseType(typeof(ApiResponse<BookingDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<BookingDto>>> ApproveBooking(Guid id, CancellationToken ct = default)
+    {
+        var userId = GetUserIdFromToken();
+        var booking = await _bookingService.ApproveBookingAsync(id, userId, ct);
+        return Ok(ApiResponse<BookingDto>.SuccessResponse(booking, "Booking approved successfully"));
+    }
+
+    /// <summary>
+    /// OWNER: Reject a pending booking
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.OwnerOrAdmin)]
+    [HttpPost("{id:guid}/reject")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse>> RejectBooking(
+        Guid id, 
+        [FromBody] RejectStartDto? request, // Optional reason
+        CancellationToken ct = default)
+    {
+        var userId = GetUserIdFromToken();
+        // Use default reason if not provided
+        var reason = request?.Reason ?? "Rejected by owner"; 
+        
+        await _bookingService.RejectBookingAsync(id, userId, reason, ct);
+        return Ok(ApiResponse.SuccessResponse("Booking rejected successfully"));
+    }
 }
+
+public sealed record RejectStartDto(string Reason);

@@ -50,4 +50,24 @@ public interface IBookingService
     /// Extend booking time (when user is still parked)
     /// </summary>
     Task<BookingDto> ExtendBookingAsync(Guid bookingId, DateTime newEndTime, Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// OWNER: Get all bookings for all parking lots owned by this user
+    /// </summary>
+    Task<PagedResult<ParkingLotBookingDto>> GetOwnerBookingsAsync(
+        Guid ownerId,
+        string? status,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// OWNER: Approve a booking (Set status to Confirmed)
+    /// </summary>
+    Task<BookingDto> ApproveBookingAsync(Guid bookingId, Guid ownerId, CancellationToken ct = default);
+
+    /// <summary>
+    /// OWNER: Reject a booking
+    /// </summary>
+    Task RejectBookingAsync(Guid bookingId, Guid ownerId, string reason, CancellationToken ct = default);
 }

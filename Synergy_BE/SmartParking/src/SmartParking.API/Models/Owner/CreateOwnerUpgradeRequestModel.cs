@@ -10,5 +10,6 @@ public sealed class CreateOwnerUpgradeRequestModel
     public decimal? Latitude { get; set; }
     public decimal? Longitude { get; set; }
     public string PlanType { get; set; } = "Monthly"; // default
+    public Guid? PaymentTransactionId { get; set; }
 }
 

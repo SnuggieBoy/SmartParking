@@ -65,6 +65,37 @@ public sealed class BookingRepository : IBookingRepository
         return new PagedResult<Booking>(items, page, pageSize, totalCount);
     }
 
+    public async Task<PagedResult<Booking>> GetByOwnerIdAsync(
+        Guid ownerId,
+        string? status,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var query = _context.Bookings
+            .Include(b => b.ParkingLot)
+            .Include(b => b.User)
+            .Include(b => b.Vehicle)
+            .Where(b => b.ParkingLot.OwnerId == ownerId && !b.IsDeleted)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            query = query.Where(b => b.Status == status);
+        }
+
+        var totalCount = await query.CountAsync(ct);
+
+        var items = await query
+            .OrderByDescending(b => b.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        return new PagedResult<Booking>(items, page, pageSize, totalCount);
+    }
+
     public async Task<IEnumerable<Booking>> GetByParkingLotIdAsync(Guid parkingLotId, bool includeDeleted = false, CancellationToken ct = default)
     {
         var query = _context.Bookings

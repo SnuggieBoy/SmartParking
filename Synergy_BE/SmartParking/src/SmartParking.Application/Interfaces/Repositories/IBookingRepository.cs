@@ -12,6 +12,14 @@ public interface IBookingRepository
         int page,
         int pageSize,
         CancellationToken ct = default);
+
+    Task<PagedResult<Booking>> GetByOwnerIdAsync(
+        Guid ownerId,
+        string? status,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
+
     Task<IEnumerable<Booking>> GetByParkingLotIdAsync(Guid parkingLotId, bool includeDeleted = false, CancellationToken ct = default);
     Task<PagedResult<Booking>> GetByParkingLotIdPagedAsync(
         Guid parkingLotId, 

@@ -124,6 +124,10 @@ public static class ServiceCollectionExtensions
             // User OR Admin policy
             options.AddPolicy(AuthorizationPolicies.UserOrAdmin, policy =>
                 policy.RequireRole(AuthConstants.Roles.User, AuthConstants.Roles.Admin));
+
+            // User OR Owner OR Admin policy
+            options.AddPolicy(AuthorizationPolicies.UserOrOwnerOrAdmin, policy =>
+                policy.RequireRole(AuthConstants.Roles.User, AuthConstants.Roles.Owner, AuthConstants.Roles.Admin));
         });
 
         // CORS - Allow localhost, ngrok, and any origin (development)

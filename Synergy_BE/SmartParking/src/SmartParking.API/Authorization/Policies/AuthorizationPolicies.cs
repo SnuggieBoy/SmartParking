@@ -29,4 +29,9 @@ public static class AuthorizationPolicies
     /// Policy requiring either User or Admin role
     /// </summary>
     public const string UserOrAdmin = "UserOrAdmin";
+
+    /// <summary>
+    /// Policy requiring User, Owner or Admin role
+    /// </summary>
+    public const string UserOrOwnerOrAdmin = "UserOrOwnerOrAdmin";
 }
