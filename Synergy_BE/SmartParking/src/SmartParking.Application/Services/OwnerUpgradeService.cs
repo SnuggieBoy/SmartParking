@@ -77,10 +77,9 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
             ? 1000000m
             : 100000m;
 
-        if (request.PaymentTransactionId == null)
-        {
-            throw new BadRequestException("Payment transaction is required before creating an upgrade request.");
-        }
+        // PaymentTransactionId is optional: user creates request first (PendingPayment), then pays via VNPay/SePay.
+        // After payment success, callback sets PaymentTransactionId and status → PendingApproval.
+        var status = request.PaymentTransactionId.HasValue ? "Pending" : "PendingPayment";
 
         var entity = new OwnerUpgradeRequest
         {
@@ -95,7 +94,7 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
             Longitude = request.Longitude,
             PlanType = planType,
             FeeAmount = fee,
-            Status = "Pending",
+            Status = status,
             RejectReason = null,
             PaymentTransactionId = request.PaymentTransactionId,
             CreatedAt = DateTime.UtcNow
@@ -137,9 +136,11 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
         var entity = await _requestRepository.GetByIdAsync(requestId, ct)
                      ?? throw new NotFoundException("Owner upgrade request not found.");
 
-        if (!string.Equals(entity.Status, "Pending", StringComparison.OrdinalIgnoreCase))
+        var canApprove = string.Equals(entity.Status, "Pending", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(entity.Status, "PendingApproval", StringComparison.OrdinalIgnoreCase);
+        if (!canApprove)
         {
-            throw new BadRequestException("Only pending requests can be approved.");
+            throw new BadRequestException("Only pending or pending approval requests can be approved.");
         }
 
         // Promote user to Owner role
@@ -173,9 +174,11 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
         var entity = await _requestRepository.GetByIdAsync(requestId, ct)
                      ?? throw new NotFoundException("Owner upgrade request not found.");
 
-        if (!string.Equals(entity.Status, "Pending", StringComparison.OrdinalIgnoreCase))
+        var canReject = string.Equals(entity.Status, "Pending", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(entity.Status, "PendingApproval", StringComparison.OrdinalIgnoreCase);
+        if (!canReject)
         {
-            throw new BadRequestException("Only pending requests can be rejected.");
+            throw new BadRequestException("Only pending or pending approval requests can be rejected.");
         }
 
         entity.Status = "Rejected";

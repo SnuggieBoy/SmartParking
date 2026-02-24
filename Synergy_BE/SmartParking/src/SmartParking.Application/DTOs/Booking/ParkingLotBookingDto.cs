@@ -2,6 +2,7 @@ namespace SmartParking.Application.DTOs.Booking;
 
 public sealed record ParkingLotBookingDto(
     Guid BookingId,
+    string ParkingLotName,
     string UserFullName,
     string? VehiclePlate,
     string Status,
@@ -9,6 +10,7 @@ public sealed record ParkingLotBookingDto(
     DateTime EndTime,
     DateTime? CheckInTime,
     DateTime? CheckOutTime,
-    decimal TotalAmount
+    decimal TotalAmount,
+    string? PaymentStatus
 );
 

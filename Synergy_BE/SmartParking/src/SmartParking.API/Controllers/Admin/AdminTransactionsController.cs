@@ -30,6 +30,7 @@ public sealed class AdminTransactionsController : BaseApiController
     public async Task<ActionResult<ApiResponse<PagedResult<TransactionDto>>>> GetTransactions(
         [FromQuery] string? status,
         [FromQuery] string? paymentMethod,
+        [FromQuery] string? paymentType,
         [FromQuery] Guid? userId,
         [FromQuery] Guid? parkingLotId,
         [FromQuery] DateTime? fromDate,
@@ -38,7 +39,9 @@ public sealed class AdminTransactionsController : BaseApiController
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default)
     {
-        var filter = new TransactionFilterDto(status, paymentMethod, userId, parkingLotId, fromDate, toDate, page, pageSize);
+        // Admin mặc định chỉ xem Subscription (phí nâng cấp owner + phí bãi tháng/năm)
+        var effectivePaymentType = string.IsNullOrEmpty(paymentType) ? "Subscription" : paymentType;
+        var filter = new TransactionFilterDto(status, paymentMethod, effectivePaymentType, userId, parkingLotId, fromDate, toDate, page, pageSize);
         var result = await _adminService.GetTransactionsAsync(filter, ct);
         return Ok(ApiResponse<PagedResult<TransactionDto>>.SuccessResponse(result, "Transactions retrieved successfully"));
     }

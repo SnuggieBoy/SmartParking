@@ -49,6 +49,11 @@ public sealed class AdminService : IAdminService
             query = query.Where(p => p.PaymentMethod == filter.PaymentMethod);
         }
 
+        if (!string.IsNullOrWhiteSpace(filter.PaymentType) && filter.PaymentType != "All")
+        {
+            query = query.Where(p => p.PaymentType == filter.PaymentType);
+        }
+
         if (filter.UserId.HasValue)
         {
             query = query.Where(p => p.UserId == filter.UserId.Value);
@@ -89,6 +94,7 @@ public sealed class AdminService : IAdminService
             Amount: p.Amount,
             PaymentMethod: p.PaymentMethod ?? "Unknown",
             PaymentStatus: p.PaymentStatus ?? "Unknown",
+            PaymentType: p.PaymentType,
             TransactionRef: p.VnpTxnRef ?? p.SePayOrderId ?? "N/A",
             BankCode: p.VnpBankCode ?? p.SePayBankCode,
             CreatedAt: p.CreatedAt,
@@ -128,6 +134,7 @@ public sealed class AdminService : IAdminService
             Amount: p.Amount,
             PaymentMethod: p.PaymentMethod ?? "Unknown",
             PaymentStatus: p.PaymentStatus ?? "Unknown",
+            PaymentType: p.PaymentType,
             TransactionRef: p.VnpTxnRef ?? p.SePayOrderId ?? "N/A",
             BankCode: p.VnpBankCode ?? p.SePayBankCode,
             CreatedAt: p.CreatedAt,
@@ -229,8 +236,9 @@ public sealed class AdminService : IAdminService
         string period,
         CancellationToken ct = default)
     {
+        // Admin báo cáo doanh thu: chỉ Subscription (phí nâng cấp + phí bãi tháng/năm)
         var payments = await _context.PaymentTransactions
-            .Where(p => !p.IsDeleted && p.CreatedAt >= fromDate && p.CreatedAt <= toDate)
+            .Where(p => !p.IsDeleted && p.PaymentType == "Subscription" && p.CreatedAt >= fromDate && p.CreatedAt <= toDate)
             .ToListAsync(ct);
 
         var successful = payments.Where(p => p.PaymentStatus == "Success").ToList();

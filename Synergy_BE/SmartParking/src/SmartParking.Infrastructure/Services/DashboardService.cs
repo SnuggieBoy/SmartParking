@@ -90,21 +90,19 @@ public sealed class DashboardService : IDashboardService
         var today = DateTime.UtcNow.Date;
         var tomorrow = today.AddDays(1);
 
-        // Get successful payments today
+        // Admin chỉ tính: phí nâng cấp owner + phí bãi gửi xe tháng/năm (PaymentType = Subscription)
         var paymentsToday = await _context.PaymentTransactions
             .Where(p => p.PaymentStatus == "Success" &&
+                       p.PaymentType == "Subscription" &&
                        p.CreatedAt >= today &&
                        p.CreatedAt < tomorrow &&
                        !p.IsDeleted)
             .ToListAsync(ct);
 
         var totalRevenue = paymentsToday.Sum(p => p.Amount);
-        
-        // Calculate commission using configured rate
         var commissionRate = _commissionSettings.CommissionRatePercent / 100m;
         var totalCommission = totalRevenue * commissionRate;
 
-        // Count completed bookings today (bookings with successful payment)
         var completedBookingsToday = await _context.Bookings
             .Where(b => b.Status == "Completed" &&
                        b.UpdatedAt.HasValue &&

@@ -15,6 +15,7 @@ public sealed record TransactionDto(
     decimal Amount,
     string PaymentMethod,
     string PaymentStatus,
+    string? PaymentType,
     string TransactionRef,
     string? BankCode,
     DateTime CreatedAt,
@@ -27,11 +28,13 @@ public sealed record TransactionDto(
 );
 
 /// <summary>
-/// Filter for transaction listing
+/// Filter for transaction listing.
+/// Admin mặc định chỉ xem PaymentType = Subscription (phí nâng cấp + phí bãi gửi tháng/năm).
 /// </summary>
 public sealed record TransactionFilterDto(
     string? Status,
     string? PaymentMethod,
+    string? PaymentType, // null = Subscription only (admin), "All" = tất cả
     Guid? UserId,
     Guid? ParkingLotId,
     DateTime? FromDate,

@@ -308,7 +308,7 @@ public sealed class SePayService : ISePayService
         else if (isSuccess && payment.PaymentType == "Subscription" && payment.OwnerUpgradeRequestId.HasValue)
         {
             var upgradeRequest = await _ownerUpgradeRequestRepository.GetByIdAsync(payment.OwnerUpgradeRequestId.Value, ct);
-            if (upgradeRequest != null && upgradeRequest.Status == "Pending")
+            if (upgradeRequest != null && (upgradeRequest.Status == "Pending" || upgradeRequest.Status == "PendingPayment"))
             {
                 upgradeRequest.Status = "PendingApproval";
                 upgradeRequest.PaymentTransactionId = payment.PaymentId;

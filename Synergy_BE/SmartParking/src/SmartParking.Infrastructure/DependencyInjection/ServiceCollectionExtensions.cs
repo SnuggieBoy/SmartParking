@@ -28,11 +28,13 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IEmailOtpRepository, EmailOtpRepository>();
         services.AddScoped<IPaymentRepository, PaymentRepository>();
         services.AddScoped<IBookingRepository, BookingRepository>();
+        services.AddScoped<IExtensionRequestRepository, ExtensionRequestRepository>();
         services.AddScoped<IParkingLotRepository, ParkingLotRepository>();
         services.AddScoped<IVehicleRepository, VehicleRepository>();
         services.AddScoped<IParkingLocationRepository, ParkingLocationRepository>();
         services.AddScoped<IOwnerUpgradeRequestRepository, OwnerUpgradeRequestRepository>();
         services.AddScoped<IOwnerBankAccountRepository, OwnerBankAccountRepository>();
+        services.AddScoped<IUserWalletRepository, UserWalletRepository>();
 
         // Services
         services.AddScoped<IVnPayService, VnPayService>();

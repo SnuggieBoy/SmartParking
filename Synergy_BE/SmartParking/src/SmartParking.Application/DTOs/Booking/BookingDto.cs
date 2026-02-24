@@ -78,7 +78,7 @@ public sealed record BookingListDto(
     DateTime? CheckOutTime
 );
 
-// Backward compatibility
+// Backward compatibility + detail fields for GetById
 public sealed record BookingDto(
     Guid BookingId,
     Guid UserId,
@@ -90,7 +90,9 @@ public sealed record BookingDto(
     DateTime EndTime,
     string Status,
     decimal TotalAmount,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    DateTime? CheckInTime = null,
+    DateTime? CheckOutTime = null
 );
 
 /// <summary>
@@ -99,4 +101,20 @@ public sealed record BookingDto(
 public sealed record ExtendBookingDto(
     [Required(ErrorMessage = "New end time is required")]
     DateTime NewEndTime
+);
+
+/// <summary>
+/// DTO for extension request (owner sees when approving)
+/// </summary>
+public sealed record ExtensionRequestDto(
+    Guid ExtensionRequestId,
+    Guid BookingId,
+    string ParkingLotName,
+    string UserFullName,
+    string? VehiclePlate,
+    DateTime CurrentEndTime,
+    DateTime RequestedEndTime,
+    int AvailableSlots,
+    int TotalCapacity,
+    DateTime CreatedAt
 );

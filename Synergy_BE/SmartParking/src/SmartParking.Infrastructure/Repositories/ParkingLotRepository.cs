@@ -58,10 +58,14 @@ public sealed class ParkingLotRepository : IParkingLotRepository
             query = query.Where(p => p.IsActive == isActive.Value);
         }
 
-        // Filter by Status
+        // Filter by Status - when null, default to public lots (Approved or Active)
         if (!string.IsNullOrWhiteSpace(status))
         {
             query = query.Where(p => p.Status == status);
+        }
+        else if (isActive.HasValue && isActive.Value)
+        {
+            query = query.Where(p => p.Status == "Approved" || p.Status == "Active");
         }
 
         // Get total count
@@ -158,16 +162,39 @@ public sealed class ParkingLotRepository : IParkingLotRepository
     public async Task<IEnumerable<ParkingLot>> GetAllWithLocationAsync(bool onlyActive = true, CancellationToken ct = default)
     {
         var query = _context.ParkingLots
+            .Include(p => p.Owner)
             .AsNoTracking()
-            .Where(p => !p.IsDeleted &&
-                        p.Latitude.HasValue &&
-                        p.Longitude.HasValue);
+            .Where(p => !p.IsDeleted);
 
         if (onlyActive)
         {
-            query = query.Where(p => p.IsActive && p.Status == "Approved");
+            // Accept both "Approved" and "Active" - DB may use either
+            query = query.Where(p => p.IsActive && (p.Status == "Approved" || p.Status == "Active"));
         }
 
-        return await query.ToListAsync(ct);
+        var lots = await query.ToListAsync(ct);
+
+        // Lots need lat/lng: use ParkingLot's or fallback to ParkingLocation
+        var lotIds = lots.Where(p => !p.Latitude.HasValue || !p.Longitude.HasValue).Select(p => p.ParkingLotId).ToList();
+        if (lotIds.Count > 0)
+        {
+            var locations = await _context.ParkingLocations
+                .AsNoTracking()
+                .Where(pl => lotIds.Contains(pl.ParkingLotId) && !pl.IsDeleted)
+                .ToListAsync(ct);
+
+            foreach (var lot in lots)
+            {
+                if (lot.Latitude.HasValue && lot.Longitude.HasValue) continue;
+                var loc = locations.FirstOrDefault(l => l.ParkingLotId == lot.ParkingLotId);
+                if (loc != null)
+                {
+                    lot.Latitude = loc.Latitude;
+                    lot.Longitude = loc.Longitude;
+                }
+            }
+        }
+
+        return lots.Where(p => p.Latitude.HasValue && p.Longitude.HasValue).ToList();
     }
 }

@@ -40,7 +40,13 @@ public sealed class PaymentService : IPaymentService
         var payment = await _paymentRepository.GetLatestByBookingIdAsync(bookingId, ct);
         if (payment == null)
         {
-            throw new NotFoundException(Messages.Payment.TransactionNotFound);
+            return new PaymentStatusDto(
+                bookingId,
+                booking.TotalAmount,
+                nameof(PaymentStatus.Pending),
+                null,
+                null
+            );
         }
 
         DateTime? paidAt = payment.PaymentStatus == nameof(PaymentStatus.Success)

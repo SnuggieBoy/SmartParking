@@ -46,7 +46,8 @@ public sealed class BookingsController : BaseApiController
     {
         var userId = GetUserIdFromToken();
         var isAdmin = IsAdmin();
-        var booking = await _bookingService.GetByIdAsync(id, userId, isAdmin, ct);
+        var isOwner = IsOwner();
+        var booking = await _bookingService.GetByIdAsync(id, userId, isAdmin, isOwner, ct);
         return Ok(ApiResponse<BookingDto>.SuccessResponse(booking, "Booking retrieved successfully"));
     }
 
@@ -94,10 +95,10 @@ public sealed class BookingsController : BaseApiController
     }
 
     /// <summary>
-    /// SECURITY: Only booking owner OR Admin can check-in.
-    /// Booking must be in Confirmed status to proceed.
+    /// SECURITY: Booking owner (User), Parking lot Owner, or Admin can check-in.
+    /// Booking must be in Confirmed status. Owner có thể giả lập check-in cho khách tại bãi của mình.
     /// </summary>
-    [Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
+    [Authorize(Policy = AuthorizationPolicies.UserOrOwnerOrAdmin)]
     [HttpPost("{id:guid}/check-in")]
     [ProducesResponseType(typeof(ApiResponse<BookingCheckInResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<BookingCheckInResponseDto>), StatusCodes.Status400BadRequest)]
@@ -106,16 +107,17 @@ public sealed class BookingsController : BaseApiController
     public async Task<ActionResult<ApiResponse<BookingCheckInResponseDto>>> CheckIn(Guid id, CancellationToken ct = default)
     {
         var userId = GetUserIdFromToken();
-        var isAdmin = User.IsInRole(AuthConstants.Roles.Admin);
-        var result = await _bookingService.BookingCheckInAsync(id, userId, isAdmin, ct);
+        var isAdmin = IsAdmin();
+        var isOwner = IsOwner();
+        var result = await _bookingService.BookingCheckInAsync(id, userId, isAdmin, isOwner, ct);
         return Ok(ApiResponse<BookingCheckInResponseDto>.SuccessResponse(result, Messages.Booking.CheckInSuccess));
     }
 
     /// <summary>
-    /// SECURITY: Only booking owner OR Admin can check-out.
-    /// Booking must be in InProgress status to proceed.
+    /// SECURITY: Booking owner (User), Parking lot Owner, or Admin can check-out.
+    /// Booking must be in InProgress status. Owner có thể giả lập check-out cho khách.
     /// </summary>
-    [Authorize(Policy = AuthorizationPolicies.UserOrAdmin)]
+    [Authorize(Policy = AuthorizationPolicies.UserOrOwnerOrAdmin)]
     [HttpPost("{id:guid}/check-out")]
     [ProducesResponseType(typeof(ApiResponse<BookingCheckOutResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<BookingCheckOutResponseDto>), StatusCodes.Status400BadRequest)]
@@ -124,8 +126,9 @@ public sealed class BookingsController : BaseApiController
     public async Task<ActionResult<ApiResponse<BookingCheckOutResponseDto>>> CheckOut(Guid id, CancellationToken ct = default)
     {
         var userId = GetUserIdFromToken();
-        var isAdmin = User.IsInRole(AuthConstants.Roles.Admin);
-        var result = await _bookingService.BookingCheckOutAsync(id, userId, isAdmin, ct);
+        var isAdmin = IsAdmin();
+        var isOwner = IsOwner();
+        var result = await _bookingService.BookingCheckOutAsync(id, userId, isAdmin, isOwner, ct);
         return Ok(ApiResponse<BookingCheckOutResponseDto>.SuccessResponse(result, Messages.Booking.CheckOutSuccess));
     }
 
@@ -160,21 +163,78 @@ public sealed class BookingsController : BaseApiController
     }
 
     /// <summary>
-    /// Extend booking time (for confirmed or in-progress bookings)
+    /// User requests extension (owner must approve)
     /// </summary>
-    [HttpPut("{id:guid}/extend")]
-    [ProducesResponseType(typeof(ApiResponse<BookingDto>), StatusCodes.Status200OK)]
+    [HttpPost("{id:guid}/extension-request")]
+    [ProducesResponseType(typeof(ApiResponse<ExtensionRequestDto>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ApiResponse<BookingDto>>> ExtendBooking(
+    public async Task<ActionResult<ApiResponse<ExtensionRequestDto>>> RequestExtension(
         Guid id,
         [FromBody] ExtendBookingDto request,
         CancellationToken ct = default)
     {
         var userId = GetUserIdFromToken();
-        var booking = await _bookingService.ExtendBookingAsync(id, request.NewEndTime, userId, ct);
-        return Ok(ApiResponse<BookingDto>.SuccessResponse(booking, "Booking extended successfully"));
+        var result = await _bookingService.RequestExtensionAsync(id, request.NewEndTime, userId, ct);
+        return CreatedAtAction(
+            nameof(GetById),
+            new { id },
+            ApiResponse<ExtensionRequestDto>.SuccessResponse(result, "Extension request submitted. Waiting for owner approval.")
+        );
+    }
+
+    /// <summary>
+    /// OWNER: Get pending extension requests (with available slots)
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.OwnerOrAdmin)]
+    [HttpGet("owner/extension-requests")]
+    [ProducesResponseType(typeof(ApiResponse<IEnumerable<ExtensionRequestDto>>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<IEnumerable<ExtensionRequestDto>>>> GetExtensionRequests(CancellationToken ct = default)
+    {
+        var userId = GetUserIdFromToken();
+        var result = await _bookingService.GetPendingExtensionRequestsAsync(userId, ct);
+        return Ok(ApiResponse<IEnumerable<ExtensionRequestDto>>.SuccessResponse(result, "Extension requests retrieved successfully"));
+    }
+
+    /// <summary>
+    /// OWNER: Approve extension request
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.OwnerOrAdmin)]
+    [HttpPost("extension-requests/{extensionRequestId:guid}/approve")]
+    [ProducesResponseType(typeof(ApiResponse<BookingDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<BookingDto>>> ApproveExtension(
+        Guid extensionRequestId,
+        CancellationToken ct = default)
+    {
+        var userId = GetUserIdFromToken();
+        var isAdmin = IsAdmin();
+        var booking = await _bookingService.ApproveExtensionAsync(extensionRequestId, userId, isAdmin, ct);
+        return Ok(ApiResponse<BookingDto>.SuccessResponse(booking, "Extension approved successfully"));
+    }
+
+    /// <summary>
+    /// OWNER: Reject extension request
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.OwnerOrAdmin)]
+    [HttpPost("extension-requests/{extensionRequestId:guid}/reject")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse>> RejectExtension(
+        Guid extensionRequestId,
+        [FromBody] RejectStartDto? request,
+        CancellationToken ct = default)
+    {
+        var userId = GetUserIdFromToken();
+        var isAdmin = IsAdmin();
+        var reason = request?.Reason ?? "Rejected by owner";
+        await _bookingService.RejectExtensionAsync(extensionRequestId, userId, reason, isAdmin, ct);
+        return Ok(ApiResponse.SuccessResponse("Extension rejected successfully"));
     }
     /// <summary>
     /// OWNER: Get all bookings for all my parking lots
@@ -205,7 +265,8 @@ public sealed class BookingsController : BaseApiController
     public async Task<ActionResult<ApiResponse<BookingDto>>> ApproveBooking(Guid id, CancellationToken ct = default)
     {
         var userId = GetUserIdFromToken();
-        var booking = await _bookingService.ApproveBookingAsync(id, userId, ct);
+        var isAdmin = IsAdmin();
+        var booking = await _bookingService.ApproveBookingAsync(id, userId, isAdmin, ct);
         return Ok(ApiResponse<BookingDto>.SuccessResponse(booking, "Booking approved successfully"));
     }
 
@@ -224,10 +285,10 @@ public sealed class BookingsController : BaseApiController
         CancellationToken ct = default)
     {
         var userId = GetUserIdFromToken();
-        // Use default reason if not provided
+        var isAdmin = IsAdmin();
         var reason = request?.Reason ?? "Rejected by owner"; 
         
-        await _bookingService.RejectBookingAsync(id, userId, reason, ct);
+        await _bookingService.RejectBookingAsync(id, userId, reason, isAdmin, ct);
         return Ok(ApiResponse.SuccessResponse("Booking rejected successfully"));
     }
 }

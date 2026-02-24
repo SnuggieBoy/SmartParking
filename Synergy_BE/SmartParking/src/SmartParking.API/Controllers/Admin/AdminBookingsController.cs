@@ -49,7 +49,7 @@ public sealed class AdminBookingsController : BaseApiController
     public async Task<ActionResult<ApiResponse<BookingDto>>> GetById(Guid id, CancellationToken ct = default)
     {
         var adminId = GetUserIdFromToken();
-        var booking = await _bookingService.GetByIdAsync(id, adminId, isAdmin: true, ct);
+        var booking = await _bookingService.GetByIdAsync(id, adminId, isAdmin: true, isOwner: false, ct);
         return Ok(ApiResponse<BookingDto>.SuccessResponse(booking, "Booking retrieved successfully"));
     }
 
@@ -91,7 +91,7 @@ public sealed class AdminBookingsController : BaseApiController
     public async Task<ActionResult<ApiResponse<BookingCheckInResponseDto>>> CheckIn(Guid id, CancellationToken ct = default)
     {
         var adminId = GetUserIdFromToken();
-        var result = await _bookingService.BookingCheckInAsync(id, adminId, isAdmin: true, ct);
+        var result = await _bookingService.BookingCheckInAsync(id, adminId, isAdmin: true, isOwner: false, ct);
         return Ok(ApiResponse<BookingCheckInResponseDto>.SuccessResponse(result, Messages.Booking.CheckInSuccess));
     }
 
@@ -104,7 +104,7 @@ public sealed class AdminBookingsController : BaseApiController
     public async Task<ActionResult<ApiResponse<BookingCheckOutResponseDto>>> CheckOut(Guid id, CancellationToken ct = default)
     {
         var adminId = GetUserIdFromToken();
-        var result = await _bookingService.BookingCheckOutAsync(id, adminId, isAdmin: true, ct);
+        var result = await _bookingService.BookingCheckOutAsync(id, adminId, isAdmin: true, isOwner: false, ct);
         return Ok(ApiResponse<BookingCheckOutResponseDto>.SuccessResponse(result, Messages.Booking.CheckOutSuccess));
     }
 }

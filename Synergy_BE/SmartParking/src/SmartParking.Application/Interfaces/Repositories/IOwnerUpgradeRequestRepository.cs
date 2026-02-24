@@ -18,5 +18,6 @@ public interface IOwnerUpgradeRequestRepository
     Task<OwnerUpgradeRequest> CreateAsync(OwnerUpgradeRequest request, CancellationToken ct = default);
 
     Task UpdateAsync(OwnerUpgradeRequest request, CancellationToken ct = default);
+    Task UpdatePaymentAsync(Guid requestId, Guid paymentTransactionId, CancellationToken ct = default);
 }
 

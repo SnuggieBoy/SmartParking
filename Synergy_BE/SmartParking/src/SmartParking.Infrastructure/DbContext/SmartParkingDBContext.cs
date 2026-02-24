@@ -61,6 +61,13 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
     public virtual DbSet<Review> Reviews { get; set; }
 
     public virtual DbSet<Notification> Notifications { get; set; }
+
+    public virtual DbSet<ExtensionRequest> ExtensionRequests { get; set; }
+
+    public virtual DbSet<UserWallet> UserWallets { get; set; }
+
+    public virtual DbSet<WalletTransaction> WalletTransactions { get; set; }
+
     public static string GetConnectionString(string connectionStringName)
     {
         var config = new ConfigurationBuilder()
@@ -608,6 +615,51 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
 
             // Global query filter for soft delete
             entity.HasQueryFilter(e => !e.IsDeleted);
+        });
+
+        // ExtensionRequest entity configuration
+        modelBuilder.Entity<ExtensionRequest>(entity =>
+        {
+            entity.HasKey(e => e.ExtensionRequestId).HasName("PK_ExtensionRequests");
+            entity.Property(e => e.ExtensionRequestId).HasDefaultValueSql("(newid())");
+            entity.Property(e => e.RequestedEndTime).IsRequired();
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(20).HasDefaultValue("Pending");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getutcdate())");
+            entity.HasIndex(e => new { e.BookingId, e.Status }).HasDatabaseName("IX_ExtensionRequests_BookingId_Status");
+            entity.HasOne(d => d.Booking)
+                .WithMany()
+                .HasForeignKey(d => d.BookingId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ExtensionRequests_Bookings");
+        });
+
+        modelBuilder.Entity<UserWallet>(entity =>
+        {
+            entity.HasKey(e => e.UserId).HasName("PK_UserWallets");
+            entity.Property(e => e.Balance).HasColumnType("decimal(18, 2)").HasDefaultValue(0);
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("(getutcdate())");
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_UserWallets_Users");
+        });
+
+        modelBuilder.Entity<WalletTransaction>(entity =>
+        {
+            entity.HasKey(e => e.WalletTransactionId).HasName("PK_WalletTransactions");
+            entity.Property(e => e.WalletTransactionId).HasDefaultValueSql("(newid())");
+            entity.Property(e => e.Amount).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.BalanceAfter).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.Type).HasMaxLength(50);
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getutcdate())");
+            entity.HasIndex(e => new { e.UserId, e.CreatedAt }).HasDatabaseName("IX_WalletTransactions_UserId_CreatedAt");
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_WalletTransactions_Users");
         });
 
         // Notification entity configuration

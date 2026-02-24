@@ -72,5 +72,16 @@ public sealed class OwnerUpgradeRequestRepository : IOwnerUpgradeRequestReposito
         _context.OwnerUpgradeRequests.Update(request);
         await _context.SaveChangesAsync(ct);
     }
+
+    public async Task UpdatePaymentAsync(Guid requestId, Guid paymentTransactionId, CancellationToken ct = default)
+    {
+        var entity = await _context.OwnerUpgradeRequests.FindAsync([requestId], ct);
+        if (entity != null)
+        {
+            entity.PaymentTransactionId = paymentTransactionId;
+            entity.Status = "PendingApproval"; // Đã thanh toán, chờ admin duyệt
+            await _context.SaveChangesAsync(ct);
+        }
+    }
 }
 

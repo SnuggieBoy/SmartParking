@@ -16,18 +16,27 @@ public sealed class BookingService : IBookingService
     private readonly IBookingRepository _bookingRepository;
     private readonly IParkingLotRepository _parkingLotRepository;
     private readonly IVehicleRepository _vehicleRepository;
+    private readonly IPaymentRepository _paymentRepository;
+    private readonly IExtensionRequestRepository _extensionRequestRepository;
+    private readonly IWalletService _walletService;
 
     public BookingService(
         IBookingRepository bookingRepository,
         IParkingLotRepository parkingLotRepository,
-        IVehicleRepository vehicleRepository)
+        IVehicleRepository vehicleRepository,
+        IPaymentRepository paymentRepository,
+        IExtensionRequestRepository extensionRequestRepository,
+        IWalletService walletService)
     {
         _bookingRepository = bookingRepository;
         _parkingLotRepository = parkingLotRepository;
         _vehicleRepository = vehicleRepository;
+        _paymentRepository = paymentRepository;
+        _extensionRequestRepository = extensionRequestRepository;
+        _walletService = walletService;
     }
 
-    public async Task<BookingDto> GetByIdAsync(Guid bookingId, Guid userId, bool isAdmin, CancellationToken ct = default)
+    public async Task<BookingDto> GetByIdAsync(Guid bookingId, Guid userId, bool isAdmin, bool isOwner = false, CancellationToken ct = default)
     {
         var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
         if (booking == null)
@@ -35,8 +44,11 @@ public sealed class BookingService : IBookingService
             throw new NotFoundException(Messages.Booking.NotFound);
         }
 
-        // SECURITY: Validate ownership or Admin access
-        SecurityHelper.ValidateOwnership(booking.UserId, userId, isAdmin);
+        var canAccess = isAdmin || booking.UserId == userId || (isOwner && booking.ParkingLot?.OwnerId == userId);
+        if (!canAccess)
+        {
+            throw new ForbiddenException();
+        }
 
         return MapToDto(booking);
     }
@@ -111,7 +123,8 @@ public sealed class BookingService : IBookingService
         };
 
         var created = await _bookingRepository.CreateAsync(booking, ct);
-        
+
+        // Không tạo PaymentTransaction ở đây - user thanh toán tại PaymentSelection (Wallet/VNPay/SePay)
         // Update occupancy
         await _parkingLotRepository.UpdateOccupancyAsync(request.ParkingLotId, 1, ct);
 
@@ -193,6 +206,7 @@ public sealed class BookingService : IBookingService
         Guid bookingId,
         Guid userId,
         bool isAdmin,
+        bool isOwner = false,
         CancellationToken ct = default)
     {
         var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
@@ -201,7 +215,8 @@ public sealed class BookingService : IBookingService
             throw new NotFoundException(Messages.Booking.NotFound);
         }
 
-        if (!isAdmin && booking.UserId != userId)
+        var canAccess = isAdmin || booking.UserId == userId || (isOwner && booking.ParkingLot?.OwnerId == userId);
+        if (!canAccess)
         {
             throw new ForbiddenException();
         }
@@ -230,6 +245,7 @@ public sealed class BookingService : IBookingService
         Guid bookingId,
         Guid userId,
         bool isAdmin,
+        bool isOwner = false,
         CancellationToken ct = default)
     {
         var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
@@ -238,7 +254,8 @@ public sealed class BookingService : IBookingService
             throw new NotFoundException(Messages.Booking.NotFound);
         }
 
-        if (!isAdmin && booking.UserId != userId)
+        var canAccess = isAdmin || booking.UserId == userId || (isOwner && booking.ParkingLot?.OwnerId == userId);
+        if (!canAccess)
         {
             throw new ForbiddenException();
         }
@@ -311,9 +328,15 @@ public sealed class BookingService : IBookingService
 
         var pagedResult = await _bookingRepository.GetByParkingLotIdPagedAsync(parkingLotId, null, page, pageSize, ct);
 
-        var dtos = pagedResult.Items
-            .Select(b => new ParkingLotBookingDto(
+        var lotName = parkingLot.Name ?? "Bãi xe";
+        var dtos = new List<ParkingLotBookingDto>();
+        foreach (var b in pagedResult.Items)
+        {
+            var payment = await _paymentRepository.GetLatestByBookingIdAsync(b.BookingId, ct);
+            var paymentStatus = payment?.PaymentStatus ?? nameof(PaymentStatus.Pending);
+            dtos.Add(new ParkingLotBookingDto(
                 b.BookingId,
+                lotName,
                 b.User?.FullName ?? string.Empty,
                 b.Vehicle?.LicensePlate,
                 b.Status,
@@ -321,9 +344,10 @@ public sealed class BookingService : IBookingService
                 b.EndTime,
                 b.CheckInTime,
                 b.CheckOutTime,
-                b.TotalAmount
-            ))
-            .ToList();
+                b.TotalAmount,
+                paymentStatus
+            ));
+        }
 
         return new PagedResult<ParkingLotBookingDto>(dtos, pagedResult.Page, pagedResult.PageSize, pagedResult.TotalCount);
     }
@@ -361,7 +385,9 @@ public sealed class BookingService : IBookingService
             booking.EndTime,
             booking.Status,
             booking.TotalAmount,
-            booking.CreatedAt
+            booking.CreatedAt,
+            booking.CheckInTime,
+            booking.CheckOutTime
         );
     }
 
@@ -475,47 +501,142 @@ public sealed class BookingService : IBookingService
         );
     }
 
-    public async Task<BookingDto> ExtendBookingAsync(Guid bookingId, DateTime newEndTime, Guid userId, CancellationToken ct = default)
+    public async Task<ExtensionRequestDto> RequestExtensionAsync(Guid bookingId, DateTime newEndTime, Guid userId, CancellationToken ct = default)
     {
         var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
         if (booking == null)
-        {
             throw new NotFoundException(Messages.Booking.NotFound);
-        }
 
-        // Only owner can extend
         if (booking.UserId != userId)
-        {
             throw new ForbiddenException();
-        }
 
-        // Can only extend InProgress or Confirmed bookings
         if (booking.Status != nameof(BookingStatus.InProgress) && booking.Status != nameof(BookingStatus.Confirmed))
-        {
             throw new BadRequestException("Can only extend confirmed or in-progress bookings");
-        }
 
-        // New end time must be after current end time
         if (newEndTime <= booking.EndTime)
-        {
             throw new BadRequestException("New end time must be after current end time");
+
+        var extReq = new ExtensionRequest
+        {
+            ExtensionRequestId = Guid.NewGuid(),
+            BookingId = bookingId,
+            RequestedEndTime = newEndTime,
+            Status = "Pending",
+            CreatedAt = DateTime.UtcNow
+        };
+        await _extensionRequestRepository.CreateAsync(extReq, ct);
+
+        var parkingLot = await _parkingLotRepository.GetByIdAsync(booking.ParkingLotId, includeDeleted: false, ct);
+        var availableSlots = parkingLot != null ? Math.Max(0, parkingLot.TotalCapacity - parkingLot.CurrentOccupancy) : 0;
+        var totalCapacity = parkingLot?.TotalCapacity ?? 0;
+
+        return new ExtensionRequestDto(
+            extReq.ExtensionRequestId,
+            bookingId,
+            booking.ParkingLot?.Name ?? "Bãi xe",
+            booking.User?.FullName ?? string.Empty,
+            booking.Vehicle?.LicensePlate,
+            booking.EndTime,
+            newEndTime,
+            availableSlots,
+            totalCapacity,
+            extReq.CreatedAt
+        );
+    }
+
+    public async Task<IEnumerable<ExtensionRequestDto>> GetPendingExtensionRequestsAsync(Guid ownerId, CancellationToken ct = default)
+    {
+        var requests = await _extensionRequestRepository.GetPendingByOwnerIdAsync(ownerId, ct);
+        var dtos = new List<ExtensionRequestDto>();
+        foreach (var r in requests)
+        {
+            var pl = await _parkingLotRepository.GetByIdAsync(r.Booking!.ParkingLotId, includeDeleted: false, ct);
+            var availableSlots = pl != null ? Math.Max(0, pl.TotalCapacity - pl.CurrentOccupancy) : 0;
+            var totalCapacity = pl?.TotalCapacity ?? 0;
+            dtos.Add(new ExtensionRequestDto(
+                r.ExtensionRequestId,
+                r.BookingId,
+                r.Booking.ParkingLot?.Name ?? "Bãi xe",
+                r.Booking.User?.FullName ?? string.Empty,
+                r.Booking.Vehicle?.LicensePlate,
+                r.Booking.EndTime,
+                r.RequestedEndTime,
+                availableSlots,
+                totalCapacity,
+                r.CreatedAt
+            ));
+        }
+        return dtos;
+    }
+
+    public async Task<BookingDto> ApproveExtensionAsync(Guid extensionRequestId, Guid ownerId, bool isAdmin = false, CancellationToken ct = default)
+    {
+        var extReq = await _extensionRequestRepository.GetByIdAsync(extensionRequestId, ct);
+        if (extReq == null)
+            throw new NotFoundException("Extension request not found");
+
+        if (extReq.Status != "Pending")
+            throw new BadRequestException("Extension request is no longer pending");
+
+        var booking = extReq.Booking;
+        if (booking == null)
+            throw new NotFoundException(Messages.Booking.NotFound);
+
+        if (!isAdmin && booking.ParkingLot?.OwnerId != ownerId)
+            throw new ForbiddenException("Bạn không phải chủ bãi xe của booking này.");
+
+        if (booking.Status != nameof(BookingStatus.InProgress) && booking.Status != nameof(BookingStatus.Confirmed))
+            throw new BadRequestException("Can only extend confirmed or in-progress bookings");
+
+        var parkingLot = await _parkingLotRepository.GetByIdAsync(booking.ParkingLotId, includeDeleted: false, ct);
+        var duration = extReq.RequestedEndTime - booking.StartTime;
+        var newTotalAmount = CalculateAmount(duration, parkingLot!.PricePerHour);
+        var extensionAmount = newTotalAmount - booking.TotalAmount;
+
+        if (extensionAmount > 0)
+        {
+            var payResult = await _walletService.PayExtensionWithWalletAsync(booking.UserId, booking.BookingId, extensionAmount, ct);
+            if (!payResult.Success)
+                throw new BadRequestException(payResult.Message ?? "Số dư ví không đủ để thanh toán gia hạn. User cần nạp tiền.");
         }
 
-        // Recalculate amount
-        var parkingLot = await _parkingLotRepository.GetByIdAsync(booking.ParkingLotId, includeDeleted: false, ct);
-        var duration = newEndTime - booking.StartTime;
-        var totalAmount = CalculateAmount(duration, parkingLot!.PricePerHour);
-
-        booking.EndTime = newEndTime;
-        booking.TotalAmount = totalAmount;
+        booking.EndTime = extReq.RequestedEndTime;
+        booking.TotalAmount = newTotalAmount;
         booking.UpdatedAt = DateTime.UtcNow;
-
         await _bookingRepository.UpdateAsync(booking, ct);
 
-        // Reload with navigation properties
-        booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
+        extReq.Status = "Approved";
+        extReq.ProcessedAt = DateTime.UtcNow;
+        extReq.ProcessedBy = ownerId;
+        await _extensionRequestRepository.UpdateAsync(extReq, ct);
+
+        booking = await _bookingRepository.GetByIdAsync(booking.BookingId, includeDeleted: false, ct)!;
         return MapToDto(booking!);
     }
+
+    public async Task RejectExtensionAsync(Guid extensionRequestId, Guid ownerId, string reason, bool isAdmin = false, CancellationToken ct = default)
+    {
+        var extReq = await _extensionRequestRepository.GetByIdAsync(extensionRequestId, ct);
+        if (extReq == null)
+            throw new NotFoundException("Extension request not found");
+
+        if (extReq.Status != "Pending")
+            throw new BadRequestException("Extension request is no longer pending");
+
+        var booking = extReq.Booking;
+        if (booking == null)
+            throw new NotFoundException(Messages.Booking.NotFound);
+
+        if (!isAdmin && booking.ParkingLot?.OwnerId != ownerId)
+            throw new ForbiddenException("Bạn không phải chủ bãi xe của booking này.");
+
+        extReq.Status = "Rejected";
+        extReq.RejectReason = reason;
+        extReq.ProcessedAt = DateTime.UtcNow;
+        extReq.ProcessedBy = ownerId;
+        await _extensionRequestRepository.UpdateAsync(extReq, ct);
+    }
+
     public async Task<PagedResult<ParkingLotBookingDto>> GetOwnerBookingsAsync(
         Guid ownerId,
         string? status,
@@ -525,9 +646,14 @@ public sealed class BookingService : IBookingService
     {
         var pagedResult = await _bookingRepository.GetByOwnerIdAsync(ownerId, status, page, pageSize, ct);
 
-        var dtos = pagedResult.Items
-            .Select(b => new ParkingLotBookingDto(
+        var dtos = new List<ParkingLotBookingDto>();
+        foreach (var b in pagedResult.Items)
+        {
+            var payment = await _paymentRepository.GetLatestByBookingIdAsync(b.BookingId, ct);
+            var paymentStatus = payment?.PaymentStatus ?? nameof(PaymentStatus.Pending);
+            dtos.Add(new ParkingLotBookingDto(
                 b.BookingId,
+                b.ParkingLot?.Name ?? "Bãi xe",
                 b.User?.FullName ?? string.Empty,
                 b.Vehicle?.LicensePlate,
                 b.Status,
@@ -535,14 +661,15 @@ public sealed class BookingService : IBookingService
                 b.EndTime,
                 b.CheckInTime,
                 b.CheckOutTime,
-                b.TotalAmount
-            ))
-            .ToList();
+                b.TotalAmount,
+                paymentStatus
+            ));
+        }
 
         return new PagedResult<ParkingLotBookingDto>(dtos, pagedResult.Page, pagedResult.PageSize, pagedResult.TotalCount);
     }
 
-    public async Task<BookingDto> ApproveBookingAsync(Guid bookingId, Guid ownerId, CancellationToken ct = default)
+    public async Task<BookingDto> ApproveBookingAsync(Guid bookingId, Guid ownerId, bool isAdmin = false, CancellationToken ct = default)
     {
         var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
         if (booking == null)
@@ -550,15 +677,21 @@ public sealed class BookingService : IBookingService
             throw new NotFoundException(Messages.Booking.NotFound);
         }
 
-        // Validate Owner
-        if (booking.ParkingLot?.OwnerId != ownerId)
+        // Validate Owner (Admin bypasses)
+        if (!isAdmin && booking.ParkingLot?.OwnerId != ownerId)
         {
-            throw new ForbiddenException();
+            throw new ForbiddenException("Bạn không phải chủ bãi xe của booking này.");
         }
 
         if (booking.Status != nameof(BookingStatus.Pending))
         {
             throw new BadRequestException("Only pending bookings can be approved.");
+        }
+
+        var payment = await _paymentRepository.GetLatestByBookingIdAsync(bookingId, ct);
+        if (payment == null || payment.PaymentStatus != nameof(PaymentStatus.Success))
+        {
+            throw new BadRequestException("Booking must be paid before owner can approve. User needs to complete payment first.");
         }
 
         booking.Status = nameof(BookingStatus.Confirmed);
@@ -570,7 +703,7 @@ public sealed class BookingService : IBookingService
         return MapToDto(booking);
     }
 
-    public async Task RejectBookingAsync(Guid bookingId, Guid ownerId, string reason, CancellationToken ct = default)
+    public async Task RejectBookingAsync(Guid bookingId, Guid ownerId, string reason, bool isAdmin = false, CancellationToken ct = default)
     {
         var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
         if (booking == null)
@@ -578,10 +711,10 @@ public sealed class BookingService : IBookingService
             throw new NotFoundException(Messages.Booking.NotFound);
         }
 
-        // Validate Owner
-        if (booking.ParkingLot?.OwnerId != ownerId)
+        // Validate Owner (Admin bypasses)
+        if (!isAdmin && booking.ParkingLot?.OwnerId != ownerId)
         {
-            throw new ForbiddenException();
+            throw new ForbiddenException("Bạn không phải chủ bãi xe của booking này.");
         }
 
         if (booking.Status != nameof(BookingStatus.Pending) && booking.Status != nameof(BookingStatus.Confirmed))

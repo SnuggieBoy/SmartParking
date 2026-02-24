@@ -28,6 +28,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IParkingLocationService, ParkingLocationService>();
         services.AddScoped<IOwnerUpgradeService, OwnerUpgradeService>();
         services.AddScoped<IOwnerBankAccountService, OwnerBankAccountService>();
+        services.AddScoped<IWalletService, WalletService>();
         
         services.AddScoped<IGoogleAuthService, GoogleAuthService>();
 
