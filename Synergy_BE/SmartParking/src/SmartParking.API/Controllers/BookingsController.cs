@@ -114,6 +114,25 @@ public sealed class BookingsController : BaseApiController
     }
 
     /// <summary>
+    /// Preview checkout: tính tiền theo thời gian thực tế, refund nếu checkout sớm.
+    /// Dùng để hiển thị màn hình xác nhận trước khi checkout.
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.UserOrOwnerOrAdmin)]
+    [HttpGet("{id:guid}/check-out/preview")]
+    [ProducesResponseType(typeof(ApiResponse<BookingCheckOutPreviewDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<BookingCheckOutPreviewDto>>> GetCheckoutPreview(Guid id, CancellationToken ct = default)
+    {
+        var userId = GetUserIdFromToken();
+        var isAdmin = IsAdmin();
+        var isOwner = IsOwner();
+        var result = await _bookingService.GetCheckoutPreviewAsync(id, userId, isAdmin, isOwner, ct);
+        if (result == null)
+            return NotFound(ApiResponse<BookingCheckOutPreviewDto>.FailureResponse("Booking không tồn tại hoặc không thể checkout"));
+        return Ok(ApiResponse<BookingCheckOutPreviewDto>.SuccessResponse(result, "Preview checkout"));
+    }
+
+    /// <summary>
     /// SECURITY: Booking owner (User), Parking lot Owner, or Admin can check-out.
     /// Booking must be in InProgress status. Owner có thể giả lập check-out cho khách.
     /// </summary>

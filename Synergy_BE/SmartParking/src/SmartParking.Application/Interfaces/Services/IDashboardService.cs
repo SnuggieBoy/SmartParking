@@ -31,4 +31,24 @@ public interface IDashboardService
     /// Get recent activities (bookings, payments, user registrations, etc.)
     /// </summary>
     Task<IEnumerable<RecentActivityDto>> GetRecentActivitiesAsync(int limit = 10, CancellationToken ct = default);
+
+    /// <summary>
+    /// Get revenue chart data by period (day, week, month, year)
+    /// </summary>
+    Task<IEnumerable<RevenueChartDto>> GetRevenueChartAsync(string period = "week", CancellationToken ct = default);
+
+    /// <summary>
+    /// Get top parking lots by revenue
+    /// </summary>
+    Task<IEnumerable<TopParkingLotChartDto>> GetTopParkingLotsAsync(int limit = 10, CancellationToken ct = default);
+
+    /// <summary>
+    /// Get user distribution (Driver vs Owner)
+    /// </summary>
+    Task<IEnumerable<UserDistributionDto>> GetUserDistributionAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Get recent reviews for dashboard
+    /// </summary>
+    Task<IEnumerable<RecentReviewDto>> GetRecentReviewsAsync(int limit = 5, CancellationToken ct = default);
 }

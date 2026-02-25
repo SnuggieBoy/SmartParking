@@ -66,4 +66,10 @@ public sealed class UserWalletRepository : IUserWalletRepository
         _context.WalletTransactions.Add(transaction);
         await _context.SaveChangesAsync(ct);
     }
+
+    public async Task<bool> HasBookingIncomeForBookingAsync(Guid bookingId, CancellationToken ct = default)
+    {
+        return await _context.WalletTransactions
+            .AnyAsync(w => w.BookingId == bookingId && w.Type == "BookingIncome", ct);
+    }
 }

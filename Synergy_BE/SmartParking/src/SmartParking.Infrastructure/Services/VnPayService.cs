@@ -20,17 +20,20 @@ public sealed class VnPayService : IVnPayService
     private readonly IPaymentRepository _paymentRepository;
     private readonly IBookingRepository _bookingRepository;
     private readonly IOwnerUpgradeRequestRepository _ownerUpgradeRequestRepository;
+    private readonly IWalletService _walletService;
 
     public VnPayService(
         IOptions<VnPaySettings> settings,
         IPaymentRepository paymentRepository,
         IBookingRepository bookingRepository,
-        IOwnerUpgradeRequestRepository ownerUpgradeRequestRepository)
+        IOwnerUpgradeRequestRepository ownerUpgradeRequestRepository,
+        IWalletService walletService)
     {
         _settings = settings.Value;
         _paymentRepository = paymentRepository;
         _bookingRepository = bookingRepository;
         _ownerUpgradeRequestRepository = ownerUpgradeRequestRepository;
+        _walletService = walletService;
     }
 
     public async Task<PaymentResponseDto> CreatePaymentUrlAsync(
@@ -192,6 +195,13 @@ public sealed class VnPayService : IVnPayService
                 {
                     booking.Status = nameof(BookingStatus.Confirmed);
                     await _bookingRepository.UpdateAsync(booking, ct);
+                }
+                // Chuyển tiền sang ví owner khi thanh toán VnPay thành công
+                var totalPaid = await _paymentRepository.GetTotalPaidForBookingAsync(payment.BookingId.Value, ct);
+                var ownerId = booking?.ParkingLot?.OwnerId ?? Guid.Empty;
+                if (ownerId != Guid.Empty && totalPaid > 0)
+                {
+                    await _walletService.TransferBookingToOwnerAsync(payment.BookingId.Value, totalPaid, ownerId, ct);
                 }
             }
             else if (payment.PaymentType == "Subscription" && payment.OwnerUpgradeRequestId.HasValue)

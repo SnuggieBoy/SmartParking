@@ -7,6 +7,9 @@ public interface IPaymentRepository
 {
     Task<PaymentTransaction?> GetByTxnRefAsync(string txnRef, CancellationToken ct = default);
     Task<PaymentTransaction?> GetLatestByBookingIdAsync(Guid bookingId, CancellationToken ct = default);
+
+    /// <summary>Tổng tiền đã thanh toán thành công cho booking (Booking + Extension).</summary>
+    Task<decimal> GetTotalPaidForBookingAsync(Guid bookingId, CancellationToken ct = default);
     Task<PaymentTransaction> CreateAsync(PaymentTransaction payment, CancellationToken ct = default);
     Task UpdateAsync(PaymentTransaction payment, CancellationToken ct = default);
     Task CreateLogAsync(PaymentLog log, CancellationToken ct = default);

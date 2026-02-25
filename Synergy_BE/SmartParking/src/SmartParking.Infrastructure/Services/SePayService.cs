@@ -18,6 +18,7 @@ public sealed class SePayService : ISePayService
     private readonly IPaymentRepository _paymentRepository;
     private readonly IBookingRepository _bookingRepository;
     private readonly IOwnerUpgradeRequestRepository _ownerUpgradeRequestRepository;
+    private readonly IWalletService _walletService;
     private readonly ILogger<SePayService> _logger;
     private readonly SePaySettings _settings;
 
@@ -25,12 +26,14 @@ public sealed class SePayService : ISePayService
         IPaymentRepository paymentRepository,
         IBookingRepository bookingRepository,
         IOwnerUpgradeRequestRepository ownerUpgradeRequestRepository,
+        IWalletService walletService,
         IConfiguration configuration,
         ILogger<SePayService> logger)
     {
         _paymentRepository = paymentRepository;
         _bookingRepository = bookingRepository;
         _ownerUpgradeRequestRepository = ownerUpgradeRequestRepository;
+        _walletService = walletService;
         _logger = logger;
         _settings = configuration.GetSection("SePay").Get<SePaySettings>() 
             ?? throw new InvalidOperationException("SePay configuration is missing");
@@ -293,18 +296,28 @@ public sealed class SePayService : ISePayService
         };
         await _paymentRepository.CreateLogAsync(log, ct);
 
-        // STEP 6: Update booking status if payment successful
-        if (isSuccess && payment.BookingId.HasValue)
+        // STEP 6: Update booking status and chuyển tiền sang owner nếu payment successful
+        if (isSuccess && payment.BookingId.HasValue && payment.PaymentType == "Booking")
         {
             var booking = await _bookingRepository.GetByIdAsync(payment.BookingId.Value, includeDeleted: false, ct);
             if (booking != null)
             {
+                if (booking.Status == nameof(BookingStatus.Pending))
+                {
+                    booking.Status = nameof(BookingStatus.Confirmed);
+                    await _bookingRepository.UpdateAsync(booking, ct);
+                }
+                var totalPaid = await _paymentRepository.GetTotalPaidForBookingAsync(payment.BookingId.Value, ct);
+                var ownerId = booking.ParkingLot?.OwnerId ?? Guid.Empty;
+                if (ownerId != Guid.Empty && totalPaid > 0)
+                {
+                    await _walletService.TransferBookingToOwnerAsync(payment.BookingId.Value, totalPaid, ownerId, ct);
+                }
                 _logger.LogInformation(
                     "Booking confirmed via SePay. BookingId: {BookingId}, OrderId: {OrderId}",
                     booking.BookingId, webhook.OrderId);
             }
         }
-
         else if (isSuccess && payment.PaymentType == "Subscription" && payment.OwnerUpgradeRequestId.HasValue)
         {
             var upgradeRequest = await _ownerUpgradeRequestRepository.GetByIdAsync(payment.OwnerUpgradeRequestId.Value, ct);

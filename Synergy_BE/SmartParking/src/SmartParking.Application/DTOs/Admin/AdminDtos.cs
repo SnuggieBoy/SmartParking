@@ -28,6 +28,41 @@ public sealed record TransactionDto(
 );
 
 /// <summary>
+/// Unified activity for admin (PaymentTransaction + WalletTransaction)
+/// </summary>
+public sealed record AdminActivityDto(
+    Guid Id,
+    string Source, // "Payment" | "Wallet"
+    string ActivityType, // Booking, Extension, Subscription, TopUp, BookingPayment, BookingIncome, Refund, EarlyCheckoutRefund, ExtensionPayment
+    Guid UserId,
+    string UserName,
+    string? UserEmail,
+    decimal Amount,
+    string Description,
+    DateTime CreatedAt,
+    string? Status,
+    string? PaymentMethod,
+    string? TransactionRef,
+    string? ParkingLotName,
+    string? OwnerName,
+    Guid? BookingId
+);
+
+/// <summary>
+/// Filter for activity listing
+/// </summary>
+public sealed record ActivityFilterDto(
+    string? ActivityType,
+    string? Status,
+    Guid? UserId,
+    Guid? ParkingLotId,
+    DateTime? FromDate,
+    DateTime? ToDate,
+    int Page = 1,
+    int PageSize = 20
+);
+
+/// <summary>
 /// Filter for transaction listing.
 /// Admin mặc định chỉ xem PaymentType = Subscription (phí nâng cấp + phí bãi gửi tháng/năm).
 /// </summary>

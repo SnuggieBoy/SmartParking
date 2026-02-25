@@ -225,9 +225,167 @@ public sealed class DashboardService : IDashboardService
             ));
         }
 
+        // Get recent wallet transactions (TopUp, BookingIncome, Refund)
+        var recentWallets = await _context.WalletTransactions
+            .Include(w => w.User)
+            .Where(w => w.Type == "TopUp" || w.Type == "BookingIncome" || w.Type == "Refund" || w.Type == "EarlyCheckoutRefund")
+            .OrderByDescending(w => w.CreatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+
+        foreach (var w in recentWallets)
+        {
+            var desc = w.Type switch
+            {
+                "TopUp" => $"User {w.User?.FullName ?? "Unknown"} nạp tiền ví: +{w.Amount:N0} đ",
+                "BookingIncome" => $"Owner {w.User?.FullName ?? "Unknown"} nhận tiền từ booking: +{w.Amount:N0} đ",
+                "Refund" => $"User {w.User?.FullName ?? "Unknown"} nhận hoàn tiền: +{w.Amount:N0} đ",
+                "EarlyCheckoutRefund" => $"User {w.User?.FullName ?? "Unknown"} nhận hoàn 70% thời gian chưa dùng: +{w.Amount:N0} đ",
+                _ => $"{w.Type}: {w.Amount:N0} đ"
+            };
+            activities.Add(new RecentActivityDto(
+                Type: w.Type,
+                Description: desc,
+                RelatedId: w.WalletTransactionId,
+                CreatedAt: w.CreatedAt,
+                UserName: w.User?.FullName,
+                ParkingLotName: null,
+                Amount: w.Amount,
+                Status: "Success"
+            ));
+        }
+
         // Sort by CreatedAt descending and take limit
         return activities
             .OrderByDescending(a => a.CreatedAt)
             .Take(limit);
     }
+
+    public async Task<IEnumerable<RevenueChartDto>> GetRevenueChartAsync(string period = "week", CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        DateTime fromDate = period.ToLower() switch
+        {
+            "day" => now.Date,
+            "month" => now.AddMonths(-1).Date,
+            "year" => now.AddYears(-1).Date,
+            _ => now.AddDays(-7).Date // week
+        };
+
+        var payments = await _context.PaymentTransactions
+            .Where(p => p.PaymentStatus == "Success" && p.PaymentType == "Subscription" &&
+                       p.CreatedAt >= fromDate && p.CreatedAt <= now && !p.IsDeleted)
+            .ToListAsync(ct);
+
+        var commissionRate = _commissionSettings.CommissionRatePercent / 100m;
+        var list = period.ToLower() switch
+        {
+            "day" => payments
+                .GroupBy(p => p.CreatedAt.Hour)
+                .OrderBy(g => g.Key)
+                .Select(g => new RevenueChartDto($"{g.Key:D2}:00", g.Sum(p => p.Amount) * commissionRate))
+                .ToList(),
+            "month" => payments
+                .GroupBy(p => new { p.CreatedAt.Year, p.CreatedAt.Month, p.CreatedAt.Day })
+                .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month).ThenBy(g => g.Key.Day)
+                .Take(31)
+                .Select(g => new RevenueChartDto($"{g.Key.Day:D2}/{g.Key.Month:D2}", g.Sum(p => p.Amount) * commissionRate))
+                .ToList(),
+            "year" => payments
+                .GroupBy(p => p.CreatedAt.Month)
+                .OrderBy(g => g.Key)
+                .Select(g => new RevenueChartDto(GetMonthName(g.Key), g.Sum(p => p.Amount) * commissionRate))
+                .ToList(),
+            _ => payments
+                .GroupBy(p => p.CreatedAt.DayOfWeek)
+                .OrderBy(g => (int)g.Key == 0 ? 7 : (int)g.Key)
+                .Select(g => new RevenueChartDto(GetDayName(g.Key), g.Sum(p => p.Amount) * commissionRate))
+                .ToList()
+        };
+        return list;
+    }
+
+    public async Task<IEnumerable<TopParkingLotChartDto>> GetTopParkingLotsAsync(int limit = 10, CancellationToken ct = default)
+    {
+        var lots = await _context.Bookings
+            .Include(b => b.ParkingLot)
+            .Where(b => !b.IsDeleted && b.Status == "Completed" && b.ParkingLot != null)
+            .GroupBy(b => b.ParkingLotId)
+            .Select(g => new
+            {
+                ParkingLotId = g.Key,
+                Revenue = g.Sum(b => b.TotalAmount),
+                Count = g.Count()
+            })
+            .OrderByDescending(x => x.Revenue)
+            .Take(limit)
+            .ToListAsync(ct);
+
+        var result = new List<TopParkingLotChartDto>();
+        foreach (var item in lots)
+        {
+            var pl = await _context.ParkingLots
+                .Include(p => p.Reviews)
+                .FirstOrDefaultAsync(p => p.ParkingLotId == item.ParkingLotId, ct);
+            if (pl == null) continue;
+            var validReviews = pl.Reviews?.Where(r => !r.IsDeleted).ToList() ?? [];
+            var avgRating = validReviews.Count > 0 ? validReviews.Average(r => r.Rating) : 0;
+            var addr = pl.Address;
+            result.Add(new TopParkingLotChartDto(pl.ParkingLotId, pl.Name ?? "N/A", addr, item.Revenue, Math.Round(avgRating, 1)));
+        }
+        return result;
+    }
+
+    public async Task<IEnumerable<UserDistributionDto>> GetUserDistributionAsync(CancellationToken ct = default)
+    {
+        var userRole = await _roleRepository.GetByNameAsync(AuthConstants.Roles.User, ct);
+        var ownerRole = await _roleRepository.GetByNameAsync(AuthConstants.Roles.Owner, ct);
+        if (userRole == null || ownerRole == null)
+            return [new UserDistributionDto("Driver", 0), new UserDistributionDto("Owner", 0)];
+
+        var drivers = await _context.Users
+            .Where(u => u.RoleId == userRole.RoleId && (u.IsActive == null || u.IsActive.Value))
+            .CountAsync(ct);
+        var owners = await _context.Users
+            .Where(u => u.RoleId == ownerRole.RoleId && (u.IsActive == null || u.IsActive.Value))
+            .CountAsync(ct);
+        return [new UserDistributionDto("Driver", drivers), new UserDistributionDto("Owner", owners)];
+    }
+
+    public async Task<IEnumerable<RecentReviewDto>> GetRecentReviewsAsync(int limit = 5, CancellationToken ct = default)
+    {
+        var reviews = await _context.Reviews
+            .Include(r => r.User)
+            .Include(r => r.ParkingLot)
+            .Where(r => !r.IsDeleted)
+            .OrderByDescending(r => r.CreatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+
+        return reviews.Select(r => new RecentReviewDto(
+            r.ReviewId,
+            r.User?.FullName ?? "Unknown",
+            r.Rating,
+            r.Comment,
+            r.CreatedAt,
+            r.User?.FullName?[0].ToString() ?? "?"
+        )).ToList();
+    }
+
+    private static string GetDayName(DayOfWeek d) => d switch
+    {
+        DayOfWeek.Monday => "Thứ 2",
+        DayOfWeek.Tuesday => "Thứ 3",
+        DayOfWeek.Wednesday => "Thứ 4",
+        DayOfWeek.Thursday => "Thứ 5",
+        DayOfWeek.Friday => "Thứ 6",
+        DayOfWeek.Saturday => "Thứ 7",
+        _ => "CN"
+    };
+
+    private static string GetMonthName(int m) => m switch
+    {
+        1 => "T1", 2 => "T2", 3 => "T3", 4 => "T4", 5 => "T5", 6 => "T6",
+        7 => "T7", 8 => "T8", 9 => "T9", 10 => "T10", 11 => "T11", _ => "T12"
+    };
 }

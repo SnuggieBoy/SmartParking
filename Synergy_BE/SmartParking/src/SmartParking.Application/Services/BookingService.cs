@@ -241,6 +241,53 @@ public sealed class BookingService : IBookingService
         );
     }
 
+    public async Task<BookingCheckOutPreviewDto?> GetCheckoutPreviewAsync(
+        Guid bookingId,
+        Guid userId,
+        bool isAdmin,
+        bool isOwner = false,
+        CancellationToken ct = default)
+    {
+        var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
+        if (booking == null) return null;
+
+        var canAccess = isAdmin || booking.UserId == userId || (isOwner && booking.ParkingLot?.OwnerId == userId);
+        if (!canAccess) return null;
+
+        if (!string.Equals(booking.Status, nameof(BookingStatus.InProgress), StringComparison.Ordinal))
+            return null;
+
+        var parkingLot = await _parkingLotRepository.GetByIdAsync(booking.ParkingLotId, includeDeleted: false, ct);
+        if (parkingLot == null) return null;
+
+        var now = DateTime.UtcNow;
+        var actualStart = booking.CheckInTime ?? booking.StartTime;
+        var actualEnd = now < actualStart ? actualStart : now;
+        var duration = actualEnd - actualStart;
+        var actualCharge = CalculateAmount(duration, parkingLot.PricePerHour);
+
+        var paidAmount = await _paymentRepository.GetTotalPaidForBookingAsync(bookingId, ct);
+        if (paidAmount <= 0) paidAmount = booking.TotalAmount;
+
+        var isEarlyCheckout = actualCharge < paidAmount && paidAmount > 0;
+        var unusedAmount = isEarlyCheckout ? paidAmount - actualCharge : 0;
+        var refundAmount = Math.Round(unusedAmount * PaymentConstants.EarlyCheckoutRefundRate, 2);
+
+        var message = isEarlyCheckout
+            ? $"Bạn đang checkout sớm. Thời gian đậu: {duration.TotalHours:F1}h. Số tiền sẽ hoàn: {refundAmount:N0}đ (70% thời gian chưa dùng)."
+            : $"Thời gian đậu: {duration.TotalHours:F1}h. Số tiền thanh toán: {actualCharge:N0}đ.";
+
+        return new BookingCheckOutPreviewDto(
+            bookingId,
+            paidAmount,
+            actualCharge,
+            refundAmount,
+            isEarlyCheckout,
+            duration.TotalHours,
+            message
+        );
+    }
+
     public async Task<BookingCheckOutResponseDto> BookingCheckOutAsync(
         Guid bookingId,
         Guid userId,
@@ -273,19 +320,37 @@ public sealed class BookingService : IBookingService
 
         var now = DateTime.UtcNow;
         var actualEnd = now;
-        
-        // Use CheckInTime if available, otherwise fallback to StartTime
+
+        // Thời gian tính từ CheckIn (owner bấm check-in), không phải StartTime
         var actualStart = booking.CheckInTime ?? booking.StartTime;
-        
+
         if (actualEnd < actualStart)
         {
             actualEnd = actualStart;
         }
 
         var duration = actualEnd - actualStart;
-        var totalAmount = CalculateAmount(duration, parkingLot.PricePerHour);
+        var actualCharge = CalculateAmount(duration, parkingLot.PricePerHour);
 
-        booking.TotalAmount = totalAmount;
+        var paidAmount = await _paymentRepository.GetTotalPaidForBookingAsync(bookingId, ct);
+        if (paidAmount <= 0) paidAmount = booking.TotalAmount;
+
+        decimal refundAmount = 0;
+        var ownerId = booking.ParkingLot?.OwnerId ?? Guid.Empty;
+
+        // Checkout sớm: hoàn 70% thời gian chưa dùng
+        if (actualCharge < paidAmount && paidAmount > 0)
+        {
+            var unusedAmount = paidAmount - actualCharge;
+            refundAmount = Math.Round(unusedAmount * PaymentConstants.EarlyCheckoutRefundRate, 2);
+
+            if (refundAmount > 0 && ownerId != Guid.Empty)
+            {
+                await _walletService.RefundEarlyCheckoutAsync(bookingId, refundAmount, booking.UserId, ownerId, ct);
+            }
+        }
+
+        booking.TotalAmount = actualCharge;
         booking.CheckOutTime = now;
         booking.Status = nameof(BookingStatus.Completed);
         booking.UpdatedAt = now;
@@ -299,7 +364,8 @@ public sealed class BookingService : IBookingService
             booking.BookingId,
             booking.Status,
             now,
-            totalAmount
+            actualCharge,
+            refundAmount
         );
     }
 
@@ -698,6 +764,14 @@ public sealed class BookingService : IBookingService
         booking.UpdatedAt = DateTime.UtcNow;
 
         await _bookingRepository.UpdateAsync(booking, ct);
+
+        // Chuyển tiền sang ví owner (tiền đã trừ từ user lúc thanh toán, pending cho tới khi duyệt)
+        var parkingLotOwnerId = booking.ParkingLot?.OwnerId ?? Guid.Empty;
+        var totalPaid = await _paymentRepository.GetTotalPaidForBookingAsync(bookingId, ct);
+        if (parkingLotOwnerId != Guid.Empty && totalPaid > 0)
+        {
+            await _walletService.TransferBookingToOwnerAsync(bookingId, totalPaid, parkingLotOwnerId, ct);
+        }
 
         // Reload to ensure updated data
         return MapToDto(booking);

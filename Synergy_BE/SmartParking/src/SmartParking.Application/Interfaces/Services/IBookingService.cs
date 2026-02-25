@@ -18,6 +18,7 @@ public interface IBookingService
     Task CancelAsync(Guid bookingId, Guid userId, bool isAdmin, CancellationToken ct = default);
 
     Task<BookingCheckInResponseDto> BookingCheckInAsync(Guid bookingId, Guid userId, bool isAdmin, bool isOwner = false, CancellationToken ct = default);
+    Task<BookingCheckOutPreviewDto?> GetCheckoutPreviewAsync(Guid bookingId, Guid userId, bool isAdmin, bool isOwner = false, CancellationToken ct = default);
     Task<BookingCheckOutResponseDto> BookingCheckOutAsync(Guid bookingId, Guid userId, bool isAdmin, bool isOwner = false, CancellationToken ct = default);
     Task<PagedResult<ParkingLotBookingDto>> GetBookingsByParkingLotAsync(Guid parkingLotId, Guid userId, bool isAdmin, int page, int pageSize, CancellationToken ct = default);
     

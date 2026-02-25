@@ -27,6 +27,137 @@ public sealed class AdminService : IAdminService
 
     #region Transactions
 
+    public async Task<PagedResult<AdminActivityDto>> GetActivitiesAsync(
+        ActivityFilterDto filter,
+        CancellationToken ct = default)
+    {
+        var activities = new List<AdminActivityDto>();
+
+        // 1. PaymentTransactions
+        var paymentQuery = _context.PaymentTransactions
+            .Include(p => p.Booking)
+                .ThenInclude(b => b!.ParkingLot)
+                    .ThenInclude(pl => pl!.Owner)
+            .Include(p => p.User)
+            .Where(p => !p.IsDeleted)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(filter.Status))
+            paymentQuery = paymentQuery.Where(p => p.PaymentStatus == filter.Status);
+        if (filter.UserId.HasValue)
+            paymentQuery = paymentQuery.Where(p => p.UserId == filter.UserId.Value);
+        if (filter.ParkingLotId.HasValue)
+            paymentQuery = paymentQuery.Where(p => p.Booking != null && p.Booking.ParkingLotId == filter.ParkingLotId.Value);
+        if (filter.FromDate.HasValue)
+            paymentQuery = paymentQuery.Where(p => p.CreatedAt >= filter.FromDate.Value);
+        if (filter.ToDate.HasValue)
+            paymentQuery = paymentQuery.Where(p => p.CreatedAt <= filter.ToDate.Value);
+        if (!string.IsNullOrWhiteSpace(filter.ActivityType))
+            paymentQuery = paymentQuery.Where(p => p.PaymentType == filter.ActivityType);
+
+        var payments = await paymentQuery.OrderByDescending(p => p.CreatedAt).ToListAsync(ct);
+        foreach (var p in payments)
+        {
+            var desc = p.PaymentType switch
+            {
+                "Booking" => $"User thanh toán {p.Amount:N0} đ cho booking tại {p.Booking?.ParkingLot?.Name ?? "N/A"}",
+                "Extension" => $"User gia hạn {p.Amount:N0} đ cho booking tại {p.Booking?.ParkingLot?.Name ?? "N/A"}",
+                "Subscription" => $"Phí nâng cấp owner / phí bãi tháng-năm: {p.Amount:N0} đ",
+                _ => $"Thanh toán {p.Amount:N0} đ"
+            };
+            activities.Add(new AdminActivityDto(
+                Id: p.PaymentId,
+                Source: "Payment",
+                ActivityType: p.PaymentType ?? "Unknown",
+                UserId: p.UserId,
+                UserName: p.User?.FullName ?? "Unknown",
+                UserEmail: p.User?.Email,
+                Amount: p.Amount,
+                Description: desc,
+                CreatedAt: p.CreatedAt,
+                Status: p.PaymentStatus,
+                PaymentMethod: p.PaymentMethod ?? "Unknown",
+                TransactionRef: p.VnpTxnRef ?? p.SePayOrderId ?? "N/A",
+                ParkingLotName: p.Booking?.ParkingLot?.Name,
+                OwnerName: p.Booking?.ParkingLot?.Owner?.FullName,
+                BookingId: p.BookingId
+            ));
+        }
+
+        // 2. WalletTransactions
+        var walletQuery = _context.WalletTransactions
+            .Include(w => w.User)
+            .AsQueryable();
+
+        if (filter.UserId.HasValue)
+            walletQuery = walletQuery.Where(w => w.UserId == filter.UserId.Value);
+        if (filter.FromDate.HasValue)
+            walletQuery = walletQuery.Where(w => w.CreatedAt >= filter.FromDate.Value);
+        if (filter.ToDate.HasValue)
+            walletQuery = walletQuery.Where(w => w.CreatedAt <= filter.ToDate.Value);
+        if (!string.IsNullOrWhiteSpace(filter.ActivityType))
+            walletQuery = walletQuery.Where(w => w.Type == filter.ActivityType);
+
+        var wallets = await walletQuery.OrderByDescending(w => w.CreatedAt).ToListAsync(ct);
+
+        foreach (var w in wallets)
+        {
+            string desc;
+            string? parkingLotName = null;
+            string? ownerName = null;
+            Guid? bookingId = w.BookingId;
+
+            if (w.BookingId.HasValue)
+            {
+                var booking = await _context.Bookings
+                    .Include(b => b!.ParkingLot)
+                        .ThenInclude(pl => pl!.Owner)
+                    .FirstOrDefaultAsync(b => b.BookingId == w.BookingId.Value, ct);
+                parkingLotName = booking?.ParkingLot?.Name;
+                ownerName = booking?.ParkingLot?.Owner?.FullName;
+            }
+
+            desc = w.Type switch
+            {
+                "TopUp" => $"User nạp tiền ví: +{w.Amount:N0} đ",
+                "BookingPayment" => $"User trả booking bằng ví: -{Math.Abs(w.Amount):N0} đ tại {parkingLotName ?? "N/A"}",
+                "ExtensionPayment" => $"User gia hạn bằng ví: -{Math.Abs(w.Amount):N0} đ tại {parkingLotName ?? "N/A"}",
+                "BookingIncome" => $"Owner nhận tiền từ booking: +{w.Amount:N0} đ tại {parkingLotName ?? "N/A"}",
+                "Refund" => $"User nhận hoàn tiền: +{w.Amount:N0} đ",
+                "EarlyCheckoutRefund" => $"User nhận hoàn 70% thời gian chưa dùng: +{w.Amount:N0} đ",
+                _ => w.Description ?? $"{w.Type}: {w.Amount:N0} đ"
+            };
+
+            activities.Add(new AdminActivityDto(
+                Id: w.WalletTransactionId,
+                Source: "Wallet",
+                ActivityType: w.Type,
+                UserId: w.UserId,
+                UserName: w.User?.FullName ?? "Unknown",
+                UserEmail: w.User?.Email,
+                Amount: w.Amount,
+                Description: desc,
+                CreatedAt: w.CreatedAt,
+                Status: "Success",
+                PaymentMethod: "Wallet",
+                TransactionRef: "W" + w.WalletTransactionId.ToString("N")[..7].ToUpperInvariant(),
+                ParkingLotName: parkingLotName,
+                OwnerName: ownerName,
+                BookingId: bookingId
+            ));
+        }
+
+        // Merge, sort, paginate
+        var sorted = activities.OrderByDescending(a => a.CreatedAt).ToList();
+        var totalCount = sorted.Count;
+        var items = sorted
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToList();
+
+        return new PagedResult<AdminActivityDto>(items, filter.Page, filter.PageSize, totalCount);
+    }
+
     public async Task<PagedResult<TransactionDto>> GetTransactionsAsync(
         TransactionFilterDto filter,
         CancellationToken ct = default)

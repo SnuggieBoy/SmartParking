@@ -51,3 +51,23 @@ public sealed record RecentActivityDto(
     decimal? Amount,
     string? Status
 );
+
+/// <summary>
+/// Revenue chart data point
+/// </summary>
+public sealed record RevenueChartDto(string Name, decimal Revenue);
+
+/// <summary>
+/// Top parking lot for dashboard
+/// </summary>
+public sealed record TopParkingLotChartDto(Guid Id, string Name, string? Address, decimal Revenue, double Rating);
+
+/// <summary>
+/// User distribution for pie chart
+/// </summary>
+public sealed record UserDistributionDto(string Name, int Value);
+
+/// <summary>
+/// Recent review for dashboard
+/// </summary>
+public sealed record RecentReviewDto(Guid Id, string User, int Rating, string? Comment, DateTime Date, string? Avatar);

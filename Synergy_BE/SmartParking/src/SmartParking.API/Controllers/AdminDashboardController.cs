@@ -78,4 +78,54 @@ public sealed class AdminDashboardController : BaseApiController
         var activities = await _dashboardService.GetRecentActivitiesAsync(limit, ct);
         return Ok(ApiResponse<IEnumerable<RecentActivityDto>>.SuccessResponse(activities, "Recent activities retrieved successfully"));
     }
+
+    /// <summary>
+    /// Get revenue chart data (day, week, month, year)
+    /// </summary>
+    [HttpGet("revenue-chart")]
+    [ProducesResponseType(typeof(ApiResponse<IEnumerable<RevenueChartDto>>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<IEnumerable<RevenueChartDto>>>> GetRevenueChart(
+        [FromQuery] string period = "week",
+        CancellationToken ct = default)
+    {
+        var data = await _dashboardService.GetRevenueChartAsync(period, ct);
+        return Ok(ApiResponse<IEnumerable<RevenueChartDto>>.SuccessResponse(data, "Revenue chart retrieved successfully"));
+    }
+
+    /// <summary>
+    /// Get top parking lots by revenue
+    /// </summary>
+    [HttpGet("top-parking-lots")]
+    [ProducesResponseType(typeof(ApiResponse<IEnumerable<TopParkingLotChartDto>>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<IEnumerable<TopParkingLotChartDto>>>> GetTopParkingLots(
+        [FromQuery] int limit = 10,
+        CancellationToken ct = default)
+    {
+        var data = await _dashboardService.GetTopParkingLotsAsync(limit, ct);
+        return Ok(ApiResponse<IEnumerable<TopParkingLotChartDto>>.SuccessResponse(data, "Top parking lots retrieved successfully"));
+    }
+
+    /// <summary>
+    /// Get user distribution (Driver vs Owner)
+    /// </summary>
+    [HttpGet("user-distribution")]
+    [ProducesResponseType(typeof(ApiResponse<IEnumerable<UserDistributionDto>>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<IEnumerable<UserDistributionDto>>>> GetUserDistribution(CancellationToken ct = default)
+    {
+        var data = await _dashboardService.GetUserDistributionAsync(ct);
+        return Ok(ApiResponse<IEnumerable<UserDistributionDto>>.SuccessResponse(data, "User distribution retrieved successfully"));
+    }
+
+    /// <summary>
+    /// Get recent reviews for dashboard
+    /// </summary>
+    [HttpGet("recent-reviews")]
+    [ProducesResponseType(typeof(ApiResponse<IEnumerable<RecentReviewDto>>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<IEnumerable<RecentReviewDto>>>> GetRecentReviews(
+        [FromQuery] int limit = 5,
+        CancellationToken ct = default)
+    {
+        var data = await _dashboardService.GetRecentReviewsAsync(limit, ct);
+        return Ok(ApiResponse<IEnumerable<RecentReviewDto>>.SuccessResponse(data, "Recent reviews retrieved successfully"));
+    }
 }

@@ -10,6 +10,12 @@ public interface IWalletService
     Task<PayWithWalletResultDto> PayWithWalletAsync(Guid userId, Guid bookingId, decimal amount, CancellationToken ct = default);
     Task<PayWithWalletResultDto> PayExtensionWithWalletAsync(Guid userId, Guid bookingId, decimal extensionAmount, CancellationToken ct = default);
     Task<PayWithWalletResultDto> PayOwnerUpgradeFromWalletAsync(Guid userId, Guid ownerUpgradeRequestId, decimal amount, CancellationToken ct = default);
+
+    /// <summary>Chuyển tiền booking sang ví owner khi owner duyệt.</summary>
+    Task<bool> TransferBookingToOwnerAsync(Guid bookingId, decimal amount, Guid ownerId, CancellationToken ct = default);
+
+    /// <summary>Hoàn tiền 70% thời gian chưa dùng khi checkout sớm.</summary>
+    Task<bool> RefundEarlyCheckoutAsync(Guid bookingId, decimal refundAmount, Guid userId, Guid ownerId, CancellationToken ct = default);
 }
 
 public record WalletTransactionDto(

@@ -11,6 +11,11 @@ public interface IAdminService
     #region Transactions
 
     /// <summary>
+    /// Get all activities (PaymentTransaction + WalletTransaction) for admin
+    /// </summary>
+    Task<PagedResult<AdminActivityDto>> GetActivitiesAsync(ActivityFilterDto filter, CancellationToken ct = default);
+
+    /// <summary>
     /// Get all transactions with filters
     /// </summary>
     Task<PagedResult<TransactionDto>> GetTransactionsAsync(TransactionFilterDto filter, CancellationToken ct = default);

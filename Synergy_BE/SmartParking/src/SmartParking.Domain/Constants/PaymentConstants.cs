@@ -29,4 +29,7 @@ public static class PaymentConstants
         public const string Pending = "pending";
         public const string Processing = "processing";
     }
+
+    /// <summary>Tỷ lệ hoàn tiền khi checkout sớm (70% thời gian chưa dùng).</summary>
+    public const decimal EarlyCheckoutRefundRate = 0.70m;
 }

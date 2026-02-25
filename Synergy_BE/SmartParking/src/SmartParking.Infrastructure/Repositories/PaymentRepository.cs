@@ -30,6 +30,15 @@ public sealed class PaymentRepository : IPaymentRepository
             .FirstOrDefaultAsync(ct);
     }
 
+    public async Task<decimal> GetTotalPaidForBookingAsync(Guid bookingId, CancellationToken ct = default)
+    {
+        return await _context.PaymentTransactions
+            .Where(p => p.BookingId == bookingId && !p.IsDeleted
+                && p.PaymentStatus == "Success"
+                && (p.PaymentType == "Booking" || p.PaymentType == "Extension"))
+            .SumAsync(p => p.Amount, ct);
+    }
+
     public async Task<PaymentTransaction> CreateAsync(PaymentTransaction payment, CancellationToken ct = default)
     {
         _context.PaymentTransactions.Add(payment);

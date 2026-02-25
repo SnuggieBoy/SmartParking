@@ -124,6 +124,13 @@ public sealed class WalletService : IWalletService
         await _walletRepository.AddTransactionAsync(walletTrans, ct);
         await _paymentRepository.CreateAsync(payment, ct);
 
+        // Chuyển tiền sang ví owner ngay khi thanh toán thành công
+        var ownerId = booking.ParkingLot?.OwnerId ?? Guid.Empty;
+        if (ownerId != Guid.Empty && amount > 0)
+        {
+            await TransferBookingToOwnerAsync(bookingId, amount, ownerId, ct);
+        }
+
         return new PayWithWalletResultDto(true, "Thanh toán thành công", wallet.Balance);
     }
 
@@ -232,5 +239,82 @@ public sealed class WalletService : IWalletService
         await _ownerUpgradeRequestRepository.UpdatePaymentAsync(ownerUpgradeRequestId, payment.PaymentId, ct);
 
         return new PayWithWalletResultDto(true, "Thanh toán phí đăng ký thành công", wallet.Balance);
+    }
+
+    /// <summary>Chuyển tiền booking sang ví owner khi thanh toán thành công (hoặc khi owner duyệt nếu chưa chuyển).</summary>
+    public async Task<bool> TransferBookingToOwnerAsync(Guid bookingId, decimal amount, Guid ownerId, CancellationToken ct = default)
+    {
+        if (amount <= 0) return false;
+
+        // Tránh chuyển trùng nếu đã chuyển từ PayWithWallet/VnPay/SePay
+        if (await _walletRepository.HasBookingIncomeForBookingAsync(bookingId, ct))
+            return true;
+
+        var ownerWallet = await _walletRepository.GetOrCreateAsync(ownerId, ct);
+        ownerWallet.Balance += amount;
+        ownerWallet.UpdatedAt = DateTime.UtcNow;
+
+        var transaction = new WalletTransaction
+        {
+            WalletTransactionId = Guid.NewGuid(),
+            UserId = ownerId,
+            Amount = amount,
+            Type = "BookingIncome",
+            BalanceAfter = ownerWallet.Balance,
+            BookingId = bookingId,
+            Description = $"Thu tiền booking #{bookingId:N}",
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _walletRepository.UpdateAsync(ownerWallet, ct);
+        await _walletRepository.AddTransactionAsync(transaction, ct);
+        return true;
+    }
+
+    /// <summary>Hoàn 70% thời gian chưa dùng khi checkout sớm: trừ owner, cộng user.</summary>
+    public async Task<bool> RefundEarlyCheckoutAsync(Guid bookingId, decimal refundAmount, Guid userId, Guid ownerId, CancellationToken ct = default)
+    {
+        if (refundAmount <= 0) return false;
+
+        var ownerWallet = await _walletRepository.GetOrCreateAsync(ownerId, ct);
+        if (ownerWallet.Balance < refundAmount)
+            return false;
+
+        ownerWallet.Balance -= refundAmount;
+        ownerWallet.UpdatedAt = DateTime.UtcNow;
+
+        var ownerTrans = new WalletTransaction
+        {
+            WalletTransactionId = Guid.NewGuid(),
+            UserId = ownerId,
+            Amount = -refundAmount,
+            Type = "EarlyCheckoutRefund",
+            BalanceAfter = ownerWallet.Balance,
+            BookingId = bookingId,
+            Description = $"Hoàn tiền checkout sớm #{bookingId:N}",
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var userWallet = await _walletRepository.GetOrCreateAsync(userId, ct);
+        userWallet.Balance += refundAmount;
+        userWallet.UpdatedAt = DateTime.UtcNow;
+
+        var userTrans = new WalletTransaction
+        {
+            WalletTransactionId = Guid.NewGuid(),
+            UserId = userId,
+            Amount = refundAmount,
+            Type = "Refund",
+            BalanceAfter = userWallet.Balance,
+            BookingId = bookingId,
+            Description = $"Hoàn 70% thời gian chưa dùng #{bookingId:N}",
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _walletRepository.UpdateAsync(ownerWallet, ct);
+        await _walletRepository.AddTransactionAsync(ownerTrans, ct);
+        await _walletRepository.UpdateAsync(userWallet, ct);
+        await _walletRepository.AddTransactionAsync(userTrans, ct);
+        return true;
     }
 }
