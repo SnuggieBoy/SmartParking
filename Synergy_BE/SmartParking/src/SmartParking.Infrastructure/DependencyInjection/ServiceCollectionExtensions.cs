@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SmartParking.Application.Common.Settings;
 using SmartParking.Application.Interfaces.Repositories;
 using SmartParking.Application.Interfaces.Services;
 using SmartParking.Infrastructure.Data;
@@ -15,6 +16,10 @@ public static class ServiceCollectionExtensions
     {
         // Register HttpContextAccessor for audit fields
         services.AddHttpContextAccessor();
+
+        // Cloudinary: bind settings from appsettings, CloudinaryService creates client from config
+        services.Configure<CloudinarySettings>(configuration.GetSection(CloudinarySettings.SectionName));
+        services.AddScoped<ICloudinaryService, CloudinaryService>();
 
         // DbContext
         services.AddDbContext<SmartParkingDBContext>(options =>

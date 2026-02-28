@@ -12,18 +12,14 @@ var app = builder.Build();
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-if (app.Environment.IsDevelopment())
+// Swagger: Bật cả Development và Production (giống TechStore - dễ test trên Azure)
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "SmartParking API V1");
-    });
-
-    // Auto-redirect root path to Swagger UI
-    app.MapGet("/", () => Results.Redirect("/swagger"))
-        .ExcludeFromDescription();
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "SmartParking API V1");
+    c.RoutePrefix = string.Empty; // Swagger làm trang chủ: https://yourapp.azurewebsites.net/
+});
+app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 
 app.UseCors();
 
@@ -62,24 +58,24 @@ static void ValidateSecrets(IConfiguration configuration, IWebHostEnvironment en
         errors.Add("JwtSettings:SecretKey appears to be a placeholder. Generate a secure random secret.");
     }
 
-    // Validate VNPay credentials (production only)
-    if (environment.IsProduction())
+    // Validate VNPay credentials (production only). Có thể bỏ qua bằng SKIP_VNPAY_VALIDATION=true khi deploy lần đầu
+    if (environment.IsProduction() && !string.Equals(Environment.GetEnvironmentVariable("SKIP_VNPAY_VALIDATION"), "true", StringComparison.OrdinalIgnoreCase))
     {
         var vnpayTmn = configuration["VnPay:TmnCode"];
         var vnpaySecret = configuration["VnPay:HashSecret"];
 
         if (string.IsNullOrWhiteSpace(vnpayTmn))
         {
-            errors.Add("VnPay:TmnCode is not configured. Set environment variable VnPay__TmnCode");
+            errors.Add("VnPay:TmnCode is not configured. Set VnPay__TmnCode in Azure App Settings, or SKIP_VNPAY_VALIDATION=true for initial deploy.");
         }
         else if (vnpayTmn.Contains("YOUR_"))
         {
-            errors.Add("VnPay:TmnCode appears to be a placeholder.");
+            errors.Add("VnPay:TmnCode appears to be a placeholder. Get sandbox credentials from vnpay.vn");
         }
 
         if (string.IsNullOrWhiteSpace(vnpaySecret))
         {
-            errors.Add("VnPay:HashSecret is not configured. Set environment variable VnPay__HashSecret");
+            errors.Add("VnPay:HashSecret is not configured. Set VnPay__HashSecret in Azure App Settings.");
         }
         else if (vnpaySecret.Contains("YOUR_"))
         {

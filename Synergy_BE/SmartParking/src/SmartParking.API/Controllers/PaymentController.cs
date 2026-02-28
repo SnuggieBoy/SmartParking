@@ -121,7 +121,8 @@ public sealed class PaymentController : BaseApiController
     {
         var userId = GetUserIdFromToken();
         var isAdmin = IsAdmin();
-        var dto = await _paymentService.GetPaymentStatusByBookingAsync(bookingId, userId, isAdmin, ct);
+        var isOwner = IsOwner();
+        var dto = await _paymentService.GetPaymentStatusByBookingAsync(bookingId, userId, isAdmin, isOwner, ct);
         return Ok(ApiResponse<PaymentStatusDto>.SuccessResponse(dto, Messages.Payment.PaymentStatusRetrieved));
     }
 

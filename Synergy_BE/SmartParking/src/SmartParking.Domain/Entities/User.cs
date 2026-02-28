@@ -18,6 +18,11 @@ public partial class User
     public int RoleId { get; set; }
 
     public bool? IsActive { get; set; }
+
+    /// <summary>
+    /// Avatar image URL (Cloudinary or external)
+    /// </summary>
+    public string? AvatarUrl { get; set; }
     
     public bool EmailConfirmed { get; set; }
 

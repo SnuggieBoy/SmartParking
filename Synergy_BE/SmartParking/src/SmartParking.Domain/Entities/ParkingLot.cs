@@ -29,6 +29,11 @@ public partial class ParkingLot
     public string Status { get; set; } = "Active";
 
     public string? RejectReason { get; set; }
+
+    /// <summary>
+    /// Main image URL (Cloudinary or external)
+    /// </summary>
+    public string? ImageUrl { get; set; }
     
     public bool IsActive { get; set; } = true;
 

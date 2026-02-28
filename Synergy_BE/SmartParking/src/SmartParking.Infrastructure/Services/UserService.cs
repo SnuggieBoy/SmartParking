@@ -202,7 +202,7 @@ public sealed class UserService : IUserService
             FullName: user.FullName ?? "Unknown",
             Email: user.Email ?? "",
             Phone: user.Phone,
-            AvatarUrl: null, // Can be extended if avatar field is added
+            AvatarUrl: user.AvatarUrl,
             RoleName: user.Role?.RoleName ?? "User",
             EmailConfirmed: user.EmailConfirmed,
             CreatedAt: user.CreatedAt,
@@ -232,8 +232,10 @@ public sealed class UserService : IUserService
             user.Phone = request.Phone.Trim();
         }
 
-        // AvatarUrl can be stored if we add the field to User entity
-        // For now, we skip it
+        if (request.AvatarUrl != null)
+        {
+            user.AvatarUrl = request.AvatarUrl.Trim();
+        }
 
         await _userRepository.UpdateAsync(user, ct);
         return await GetProfileAsync(userId, ct);

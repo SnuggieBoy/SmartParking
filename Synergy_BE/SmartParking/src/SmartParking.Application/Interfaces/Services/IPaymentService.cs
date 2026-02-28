@@ -6,7 +6,7 @@ namespace SmartParking.Application.Interfaces.Services;
 
 public interface IPaymentService
 {
-    Task<PaymentStatusDto> GetPaymentStatusByBookingAsync(Guid bookingId, Guid userId, bool isAdmin, CancellationToken ct = default);
+    Task<PaymentStatusDto> GetPaymentStatusByBookingAsync(Guid bookingId, Guid userId, bool isAdmin, bool isOwner = false, CancellationToken ct = default);
 
     /// <summary>
     /// Get payment history for a user

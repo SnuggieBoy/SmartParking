@@ -3,6 +3,7 @@ using SmartParking.Application.Common.Exceptions;
 using SmartParking.Application.Common.Models;
 using SmartParking.Application.Common.Settings;
 using SmartParking.Application.DTOs.Owner;
+using SmartParking.Application.DTOs.ParkingLot;
 using SmartParking.Application.Interfaces.Repositories;
 using SmartParking.Application.Interfaces.Services;
 using SmartParking.Domain.Constants;
@@ -18,17 +19,20 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
     private readonly IOwnerUpgradeRequestRepository _requestRepository;
     private readonly IUserRepository _userRepository;
     private readonly IRoleRepository _roleRepository;
+    private readonly IParkingLotService _parkingLotService;
     private readonly OwnerSubscriptionSettings _settings;
 
     public OwnerUpgradeService(
         IOwnerUpgradeRequestRepository requestRepository,
         IUserRepository userRepository,
         IRoleRepository roleRepository,
+        IParkingLotService parkingLotService,
         IOptions<OwnerSubscriptionSettings> settings)
     {
         _requestRepository = requestRepository;
         _userRepository = userRepository;
         _roleRepository = roleRepository;
+        _parkingLotService = parkingLotService;
         _settings = settings.Value;
     }
 
@@ -70,6 +74,11 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
             string.IsNullOrWhiteSpace(request.ParkingLotAddress))
         {
             throw new BadRequestException("Parking lot name and address are required.");
+        }
+
+        if (!request.Latitude.HasValue || !request.Longitude.HasValue)
+        {
+            throw new BadRequestException("Vui lòng chọn vị trí bãi xe trên bản đồ để người dùng có thể tìm thấy bãi xe.");
         }
 
         var planType = request.PlanType?.Trim() ?? "Monthly";
@@ -152,6 +161,16 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
 
         user.RoleId = ownerRole.RoleId;
         await _userRepository.UpdateAsync(user, ct);
+
+        // Create ParkingLot from the registration data (name, address, lat/lng) so users can find it on the map
+        var createLotDto = new CreateParkingLotDto(
+            Name: entity.ParkingLotName,
+            Address: entity.ParkingLotAddress,
+            TotalCapacity: 10,      // Default, owner can update later
+            PricePerHour: 10000m,   // Default 10k VND/hour, owner can update later
+            Latitude: entity.Latitude,
+            Longitude: entity.Longitude);
+        _ = await _parkingLotService.CreateAsync(createLotDto, entity.UserId, isAdmin: true, ct);
 
         entity.Status = "Approved";
         entity.ApprovedAt = DateTime.UtcNow;

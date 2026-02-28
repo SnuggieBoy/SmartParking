@@ -130,16 +130,16 @@ public static class ServiceCollectionExtensions
                 policy.RequireRole(AuthConstants.Roles.User, AuthConstants.Roles.Owner, AuthConstants.Roles.Admin));
         });
 
-        // CORS - Allow localhost, ngrok, and any origin (development)
+        // CORS - Production: dùng AllowedOrigins từ config. Development: AllowAll
+        var allowedOrigins = configuration.GetSection("CORS")["AllowedOrigins"]?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         services.AddCors(options =>
         {
             options.AddDefaultPolicy(builder =>
             {
-                builder.SetIsOriginAllowed(origin => true) // Allow any origin in development
-                       .AllowAnyMethod()
-                       .AllowAnyHeader()
-                       .AllowCredentials() // Required for ngrok
-                       .WithExposedHeaders("*"); // Expose all headers
+                if (allowedOrigins is { Length: > 0 })
+                    builder.WithOrigins(allowedOrigins).AllowAnyMethod().AllowAnyHeader().AllowCredentials().WithExposedHeaders("*");
+                else
+                    builder.SetIsOriginAllowed(_ => true).AllowAnyMethod().AllowAnyHeader().AllowCredentials().WithExposedHeaders("*");
             });
         });
 

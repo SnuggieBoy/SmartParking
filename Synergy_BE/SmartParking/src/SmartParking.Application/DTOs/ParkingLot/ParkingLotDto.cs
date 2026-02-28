@@ -21,6 +21,7 @@ public sealed record ParkingLotResponseDto(
     string Status,
     bool IsActive,
     string? RejectReason,
+    string? ImageUrl,
     DateTime CreatedAt,
     DateTime? UpdatedAt
 );
@@ -47,7 +48,13 @@ public sealed record CreateParkingLotDto(
     decimal? Latitude,
 
     [Range(-180, 180, ErrorMessage = "Longitude must be between -180 and 180 degrees")]
-    decimal? Longitude
+    decimal? Longitude,
+
+    /// <summary>
+    /// Optional main image URL (from Cloudinary upload)
+    /// </summary>
+    [MaxLength(500)]
+    string? ImageUrl = null
 );
 
 /// <summary>
@@ -74,7 +81,13 @@ public sealed record UpdateParkingLotDto(
     [Range(-180, 180, ErrorMessage = "Longitude must be between -180 and 180 degrees")]
     decimal? Longitude,
 
-    bool IsActive
+    bool IsActive,
+
+    /// <summary>
+    /// Optional main image URL (from Cloudinary upload)
+    /// </summary>
+    [MaxLength(500)]
+    string? ImageUrl = null
 );
 
 /// <summary>

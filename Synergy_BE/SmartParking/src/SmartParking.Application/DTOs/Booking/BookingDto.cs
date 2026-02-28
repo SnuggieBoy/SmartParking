@@ -68,6 +68,7 @@ public sealed record UpdateBookingDto(
 /// </summary>
 public sealed record BookingListDto(
     Guid BookingId,
+    Guid ParkingLotId,
     string ParkingLotName,
     string? VehiclePlate,
     DateTime StartTime,

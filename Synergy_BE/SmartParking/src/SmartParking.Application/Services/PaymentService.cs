@@ -24,6 +24,7 @@ public sealed class PaymentService : IPaymentService
         Guid bookingId,
         Guid userId,
         bool isAdmin,
+        bool isOwner = false,
         CancellationToken ct = default)
     {
         var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
@@ -32,7 +33,9 @@ public sealed class PaymentService : IPaymentService
             throw new NotFoundException(Messages.Booking.NotFound);
         }
 
-        if (!isAdmin && booking.UserId != userId)
+        // Admin: full access. User: own booking. Owner: booking at their parking lot
+        var canAccess = isAdmin || booking.UserId == userId || (isOwner && booking.ParkingLot?.OwnerId == userId);
+        if (!canAccess)
         {
             throw new ForbiddenException();
         }

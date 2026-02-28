@@ -94,6 +94,7 @@ public sealed class ParkingLotService : IParkingLotService
             PricePerHour = request.PricePerHour,
             Latitude = request.Latitude,
             Longitude = request.Longitude,
+            ImageUrl = request.ImageUrl,
             Status = isAdmin ? ParkingLotStatus.Approved : ParkingLotStatus.PendingApproval,
             IsActive = isAdmin,
             RejectReason = null,
@@ -138,6 +139,7 @@ public sealed class ParkingLotService : IParkingLotService
         parkingLot.PricePerHour = request.PricePerHour;
         parkingLot.Latitude = request.Latitude;
         parkingLot.Longitude = request.Longitude;
+        parkingLot.ImageUrl = request.ImageUrl ?? parkingLot.ImageUrl;
         parkingLot.IsActive = request.IsActive;
         parkingLot.UpdatedAt = DateTime.UtcNow;
         parkingLot.UpdatedBy = userId;
@@ -300,6 +302,7 @@ public sealed class ParkingLotService : IParkingLotService
             Status: parkingLot.Status,
             IsActive: parkingLot.IsActive,
             RejectReason: parkingLot.RejectReason,
+            ImageUrl: parkingLot.ImageUrl,
             CreatedAt: parkingLot.CreatedAt,
             UpdatedAt: parkingLot.UpdatedAt
         );

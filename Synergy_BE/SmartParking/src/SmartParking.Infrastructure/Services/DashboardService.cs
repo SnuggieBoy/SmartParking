@@ -75,7 +75,7 @@ public sealed class DashboardService : IDashboardService
             .CountAsync(ct);
 
         var pendingApproval = await _context.ParkingLots
-            .Where(p => !p.IsDeleted && p.Status == "PendingApproval")
+            .Where(p => !p.IsDeleted && p.Status == ParkingLotStatus.PendingApproval)
             .CountAsync(ct);
 
         return new ParkingLotsSummaryDto(

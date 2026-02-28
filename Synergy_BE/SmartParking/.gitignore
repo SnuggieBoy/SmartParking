@@ -74,9 +74,11 @@ $RECYCLE.BIN/
 # Mac files
 .DS_Store
 
-# Sensitive configuration files
+# Sensitive configuration files (NEVER commit real secrets!)
 **/appsettings.Production.json
+**/appsettings.Development.json
 **/*.secret.json
+**/appsettings.*.local.json
 
 # Database files
 *.mdf

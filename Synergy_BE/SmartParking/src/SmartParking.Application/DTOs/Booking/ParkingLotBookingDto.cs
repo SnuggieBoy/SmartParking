@@ -2,6 +2,7 @@ namespace SmartParking.Application.DTOs.Booking;
 
 public sealed record ParkingLotBookingDto(
     Guid BookingId,
+    Guid UserId,
     string ParkingLotName,
     string UserFullName,
     string? VehiclePlate,

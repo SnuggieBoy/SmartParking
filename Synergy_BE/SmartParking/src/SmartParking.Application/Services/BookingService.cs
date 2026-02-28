@@ -402,6 +402,7 @@ public sealed class BookingService : IBookingService
             var paymentStatus = payment?.PaymentStatus ?? nameof(PaymentStatus.Pending);
             dtos.Add(new ParkingLotBookingDto(
                 b.BookingId,
+                b.UserId,
                 lotName,
                 b.User?.FullName ?? string.Empty,
                 b.Vehicle?.LicensePlate,
@@ -461,6 +462,7 @@ public sealed class BookingService : IBookingService
     {
         return new BookingListDto(
             booking.BookingId,
+            booking.ParkingLotId,
             booking.ParkingLot?.Name ?? string.Empty,
             booking.Vehicle?.LicensePlate,
             booking.StartTime,
@@ -719,6 +721,7 @@ public sealed class BookingService : IBookingService
             var paymentStatus = payment?.PaymentStatus ?? nameof(PaymentStatus.Pending);
             dtos.Add(new ParkingLotBookingDto(
                 b.BookingId,
+                b.UserId,
                 b.ParkingLot?.Name ?? "Bãi xe",
                 b.User?.FullName ?? string.Empty,
                 b.Vehicle?.LicensePlate,
