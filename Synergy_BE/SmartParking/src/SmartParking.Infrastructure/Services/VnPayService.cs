@@ -109,6 +109,35 @@ public sealed class VnPayService : IVnPayService
         return await GenerateVnPayUrlAsync(txnRef, upgradeRequest.FeeAmount, request.Description ?? $"Owner Subscription ({upgradeRequest.PlanType})");
     }
 
+    public async Task<PaymentResponseDto> CreateWalletTopUpPaymentUrlAsync(
+        WalletTopUpRequestDto request,
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        if (request.Amount < 10000)
+            throw new BadRequestException("Số tiền nạp tối thiểu 10,000 VND");
+
+        var txnRef = $"TOP{DateTime.UtcNow:yyyyMMddHHmmss}{Random.Shared.Next(1000, 9999)}";
+
+        var payment = new PaymentTransaction
+        {
+            PaymentId = Guid.NewGuid(),
+            BookingId = null,
+            OwnerUpgradeRequestId = null,
+            UserId = userId,
+            Amount = request.Amount,
+            PaymentMethod = PaymentConstants.VnPayProvider,
+            PaymentStatus = nameof(PaymentStatus.Pending),
+            PaymentType = "WalletTopUp",
+            VnpTxnRef = txnRef,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _paymentRepository.CreateAsync(payment, ct);
+
+        return await GenerateVnPayUrlAsync(txnRef, request.Amount, request.Description ?? "Nạp tiền ví SmartParking");
+    }
+
     private Task<PaymentResponseDto> GenerateVnPayUrlAsync(string txnRef, decimal amount, string description)
     {
         var vnpParams = new Dictionary<string, string>
@@ -213,6 +242,14 @@ public sealed class VnPayService : IVnPayService
                     upgradeRequest.PaymentTransactionId = payment.PaymentId;
                     await _ownerUpgradeRequestRepository.UpdateAsync(upgradeRequest, ct);
                 }
+            }
+            else if (payment.PaymentType == "WalletTopUp")
+            {
+                await _walletService.CreditWalletFromPaymentAsync(
+                    payment.UserId,
+                    payment.Amount,
+                    $"Nạp tiền ví qua VNPay - {payment.VnpTxnRef}",
+                    ct);
             }
         }
 

@@ -20,13 +20,14 @@ public interface ISePayService
         Guid userId,
         CancellationToken ct = default);
 
-    /// <summary>
-    /// Processes SePay webhook callback
-    /// SECURITY: Verifies webhook signature before processing
-    /// </summary>
-    Task<bool> ProcessWebhookAsync(
-        SePayWebhookDto webhook,
-        string signature,
-        string rawPayload,
+    Task<SePayPaymentResponseDto> CreateWalletTopUpPaymentAsync(
+        WalletTopUpRequestDto request,
+        Guid userId,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Processes SePay webhook callback.
+    /// SECURITY: API Key verification done tại Controller trước khi gọi.
+    /// </summary>
+    Task<bool> ProcessWebhookAsync(SePayWebhookDto webhook, CancellationToken ct = default);
 }

@@ -59,6 +59,28 @@ public sealed class WalletService : IWalletService
         return new { balance = wallet.Balance, transaction = new { id = transaction.WalletTransactionId, amount, balanceAfter = wallet.Balance, type = "TopUp", createdAt = transaction.CreatedAt } };
     }
 
+    public async Task CreditWalletFromPaymentAsync(Guid userId, decimal amount, string description, CancellationToken ct = default)
+    {
+        if (amount <= 0) return;
+        var wallet = await _walletRepository.GetOrCreateAsync(userId, ct);
+        wallet.Balance += amount;
+        wallet.UpdatedAt = DateTime.UtcNow;
+
+        var transaction = new WalletTransaction
+        {
+            WalletTransactionId = Guid.NewGuid(),
+            UserId = userId,
+            Amount = amount,
+            Type = "TopUp",
+            BalanceAfter = wallet.Balance,
+            Description = description,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _walletRepository.UpdateAsync(wallet, ct);
+        await _walletRepository.AddTransactionAsync(transaction, ct);
+    }
+
     public async Task<PagedResult<WalletTransactionDto>> GetTransactionsAsync(Guid userId, int page, int pageSize, CancellationToken ct = default)
     {
         var paged = await _walletRepository.GetTransactionsAsync(userId, page, pageSize, ct);

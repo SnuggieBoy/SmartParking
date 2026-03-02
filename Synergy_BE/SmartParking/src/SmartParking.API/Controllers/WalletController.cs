@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartParking.API.Authorization.Policies;
 using SmartParking.Application.Common.Models;
+using SmartParking.Application.DTOs.Payment;
 using SmartParking.Application.Interfaces.Services;
 
 namespace SmartParking.API.Controllers;
@@ -11,10 +12,14 @@ namespace SmartParking.API.Controllers;
 public sealed class WalletController : BaseApiController
 {
     private readonly IWalletService _walletService;
+    private readonly IVnPayService _vnPayService;
+    private readonly ISePayService _sePayService;
 
-    public WalletController(IWalletService walletService)
+    public WalletController(IWalletService walletService, IVnPayService vnPayService, ISePayService sePayService)
     {
         _walletService = walletService;
+        _vnPayService = vnPayService;
+        _sePayService = sePayService;
     }
 
     [HttpGet("balance")]
@@ -34,6 +39,28 @@ public sealed class WalletController : BaseApiController
         var userId = GetUserIdFromToken();
         var result = await _walletService.TopUpAsync(userId, request.Amount, ct);
         return Ok(ApiResponse<object>.SuccessResponse(result, "Top-up successful"));
+    }
+
+    [HttpPost("topup-vnpay")]
+    [ProducesResponseType(typeof(ApiResponse<PaymentResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ApiResponse<PaymentResponseDto>>> TopUpVnPay([FromBody] WalletTopUpRequest request, CancellationToken ct = default)
+    {
+        var userId = GetUserIdFromToken();
+        var dto = new WalletTopUpRequestDto(request.Amount, request.Description ?? "Nạp tiền ví SmartParking");
+        var result = await _vnPayService.CreateWalletTopUpPaymentUrlAsync(dto, userId, ct);
+        return Ok(ApiResponse<PaymentResponseDto>.SuccessResponse(result, "VNPay URL created"));
+    }
+
+    [HttpPost("topup-sepay")]
+    [ProducesResponseType(typeof(ApiResponse<SePayPaymentResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ApiResponse<SePayPaymentResponseDto>>> TopUpSePay([FromBody] WalletTopUpRequest request, CancellationToken ct = default)
+    {
+        var userId = GetUserIdFromToken();
+        var dto = new WalletTopUpRequestDto(request.Amount, request.Description ?? "Nạp tiền ví SmartParking");
+        var result = await _sePayService.CreateWalletTopUpPaymentAsync(dto, userId, ct);
+        return Ok(ApiResponse<SePayPaymentResponseDto>.SuccessResponse(result, "SePay payment created"));
     }
 
     [HttpGet("transactions")]
@@ -95,5 +122,6 @@ public sealed class WalletController : BaseApiController
 }
 
 public record TopUpRequest(decimal Amount);
+public record WalletTopUpRequest(decimal Amount, string? Description = null);
 public record PayBookingRequest(Guid BookingId, decimal Amount);
 public record PayOwnerUpgradeRequest(Guid OwnerUpgradeRequestId, decimal Amount);

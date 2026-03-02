@@ -21,17 +21,20 @@ public sealed class PaymentController : BaseApiController
     private readonly IVnPayService _vnPayService;
     private readonly ISePayService _sePayService;
     private readonly IPaymentService _paymentService;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<PaymentController> _logger;
 
     public PaymentController(
         IVnPayService vnPayService,
         ISePayService sePayService,
         IPaymentService paymentService,
+        IConfiguration configuration,
         ILogger<PaymentController> logger)
     {
         _vnPayService = vnPayService;
         _sePayService = sePayService;
         _paymentService = paymentService;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -188,25 +191,14 @@ public sealed class PaymentController : BaseApiController
     }
 
     /// <summary>
-    /// SEPAY WEBHOOK: Public endpoint called by SePay after bank transfer.
-    /// 
-    /// CRITICAL DESIGN PRINCIPLE:
-    /// - This webhook is the SINGLE SOURCE OF TRUTH for payment confirmation
-    /// - ReturnUrl (user redirect) is NEVER used for payment status updates
-    /// - Only webhook can mark payment as successful
-    /// 
-    /// SECURITY CRITICAL:
-    /// - [AllowAnonymous] required (SePay cannot send JWT)
-    /// - Signature MUST be validated to prevent tampering
-    /// - HTTPS enforcement in production
-    /// - IP whitelist validation (optional)
-    /// - Idempotency check prevents duplicate processing
-    /// - Amount validation prevents fraud
-    /// - Never trust webhook data without signature verification
+    /// SEPAY WEBHOOK: Endpoint nhận IPN từ SePay khi có chuyển khoản vào.
+    /// SECURITY: Kiểm tra Authorization header "Apikey {SecretKey}" - theo tài liệu SePay.
+    /// SePay yêu cầu response: HTTP 200/201 + {"success": true}
     /// </summary>
     [AllowAnonymous]
     [HttpPost("sepay/webhook")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> SePayWebhook([FromBody] SePayWebhookDto webhook, CancellationToken ct)
@@ -217,60 +209,43 @@ public sealed class PaymentController : BaseApiController
         try
         {
             _logger.LogInformation(
-                "SePay webhook request received. RequestId: {RequestId}, OrderId: {OrderId}, ClientIP: {ClientIP}, IsHttps: {IsHttps}",
-                requestId, webhook.OrderId, clientIp, Request.IsHttps);
+                "SePay webhook received. RequestId: {RequestId}, Id: {Id}, Content: {Content}, ClientIP: {ClientIP}",
+                requestId, webhook.Id, webhook.Content, clientIp);
 
-            // SECURITY: HTTPS enforcement in production
-            if (!Request.IsHttps && !HttpContext.Request.Host.Host.Contains("localhost"))
+            // SECURITY: Kiểm tra Secret Key trong Header - SePay gửi: Authorization: Apikey {API_KEY}
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            var expectedSecret = _configuration["SePay:WebhookSecret"] ?? Environment.GetEnvironmentVariable("SEPAY_WEBHOOK_SECRET");
+            if (string.IsNullOrEmpty(expectedSecret))
             {
-                _logger.LogWarning(
-                    "SePay webhook: Non-HTTPS request rejected. RequestId: {RequestId}, ClientIP: {ClientIP}",
-                    requestId, clientIp);
-                return StatusCode(StatusCodes.Status426UpgradeRequired, 
-                    new { message = "HTTPS required" });
+                _logger.LogError("SePay WebhookSecret chưa cấu hình");
+                return StatusCode(500, new { success = false, message = "Server not configured" });
             }
 
-            // Get raw body for signature verification
-            Request.EnableBuffering();
-            Request.Body.Position = 0;
-            using var reader = new StreamReader(Request.Body, Encoding.UTF8, leaveOpen: true);
-            var rawPayload = await reader.ReadToEndAsync(ct);
+            var isValidAuth = !string.IsNullOrEmpty(authHeader) &&
+                authHeader.StartsWith("Apikey ", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(authHeader["Apikey ".Length..].Trim(), expectedSecret.Trim(), StringComparison.Ordinal);
 
-            // Get signature from header
-            var signature = Request.Headers["X-SePay-Signature"].FirstOrDefault();
-            if (string.IsNullOrEmpty(signature))
+            if (!isValidAuth)
             {
-                _logger.LogWarning(
-                    "SePay webhook: Missing signature header. RequestId: {RequestId}, OrderId: {OrderId}",
-                    requestId, webhook.OrderId);
-                return Unauthorized(new { message = "Missing signature", requestId });
+                _logger.LogWarning("SePay webhook: Authorization FAILED. Header present: {HasHeader}", !string.IsNullOrEmpty(authHeader));
+                return Unauthorized(new { success = false, message = "Invalid API Key" });
             }
 
-            // Process webhook (SINGLE SOURCE OF TRUTH)
-            var isSuccess = await _sePayService.ProcessWebhookAsync(webhook, signature, rawPayload, ct);
+            var isSuccess = await _sePayService.ProcessWebhookAsync(webhook, ct);
 
             if (isSuccess)
             {
-                _logger.LogInformation(
-                    "SePay webhook processed successfully. RequestId: {RequestId}, OrderId: {OrderId}",
-                    requestId, webhook.OrderId);
-                return Ok(new { message = "Webhook processed successfully", requestId });
+                _logger.LogInformation("SePay webhook processed successfully. RequestId: {RequestId}", requestId);
+                return Ok(new { success = true, message = "Webhook processed successfully", requestId });
             }
 
-            _logger.LogWarning(
-                "SePay webhook processing failed. RequestId: {RequestId}, OrderId: {OrderId}",
-                requestId, webhook.OrderId);
-            return BadRequest(new { message = "Webhook processing failed", requestId });
+            _logger.LogWarning("SePay webhook processing failed. RequestId: {RequestId}", requestId);
+            return BadRequest(new { success = false, message = "Webhook processing failed", requestId });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, 
-                "SePay webhook: Unhandled exception. RequestId: {RequestId}, OrderId: {OrderId}, ClientIP: {ClientIP}",
-                requestId, webhook.OrderId, clientIp);
-
-            // Return 200 to prevent SePay from retrying (we've logged the error)
-            // SePay will not retry if we return 200
-            return Ok(new { message = "Webhook received but processing failed", requestId });
+            _logger.LogError(ex, "SePay webhook exception. RequestId: {RequestId}, ClientIP: {ClientIP}", requestId, clientIp);
+            return Ok(new { success = false, message = "Webhook received but processing failed", requestId });
         }
     }
 

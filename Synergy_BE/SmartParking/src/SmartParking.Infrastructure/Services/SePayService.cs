@@ -7,7 +7,6 @@ using SmartParking.Application.Interfaces.Services;
 using SmartParking.Domain.Constants;
 using SmartParking.Domain.Entities;
 using SmartParking.Domain.Enums;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -187,62 +186,98 @@ public sealed class SePayService : ISePayService
         );
     }
 
+    public async Task<SePayPaymentResponseDto> CreateWalletTopUpPaymentAsync(
+        WalletTopUpRequestDto request,
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        if (request.Amount < 10000)
+            throw new BadRequestException("Số tiền nạp tối thiểu 10,000 VND");
+
+        var orderId = GenerateOrderId();
+        var transferContent = GenerateTransferContent(orderId);
+
+        var payment = new PaymentTransaction
+        {
+            PaymentId = Guid.NewGuid(),
+            BookingId = null,
+            OwnerUpgradeRequestId = null,
+            UserId = userId,
+            Amount = request.Amount,
+            PaymentMethod = PaymentConstants.SePayProvider,
+            PaymentStatus = nameof(PaymentStatus.Pending),
+            PaymentType = "WalletTopUp",
+            VnpTxnRef = orderId,
+            SePayOrderId = orderId,
+            SePayTransferContent = transferContent,
+            SePayBankCode = _settings.Bank.Code,
+            SePayBankAccount = _settings.Bank.AccountNumber,
+            Metadata = JsonSerializer.Serialize(new { Description = request.Description }),
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = userId,
+            IsDeleted = false
+        };
+
+        await _paymentRepository.CreateAsync(payment, ct);
+        var qrCode = GenerateQrCode(orderId, request.Amount, transferContent);
+
+        _logger.LogInformation(
+            "SePay wallet top-up created. OrderId: {OrderId}, UserId: {UserId}, Amount: {Amount}",
+            orderId, userId, request.Amount);
+
+        return new SePayPaymentResponseDto(
+            OrderId: orderId,
+            QrCodeBase64: qrCode,
+            BankCode: _settings.Bank.Code,
+            BankAccount: _settings.Bank.AccountNumber,
+            AccountName: _settings.Bank.AccountName,
+            TransferContent: transferContent,
+            Amount: request.Amount,
+            Status: nameof(PaymentStatus.Pending)
+        );
+    }
+
     /// <summary>
     /// SECURITY CRITICAL: Processes SePay webhook.
-    /// This is the SINGLE SOURCE OF TRUTH for payment confirmation.
-    /// Implements:
-    /// 1. Signature verification (prevents tampering)
-    /// 2. Idempotency check (prevents duplicate processing)
-    /// 3. Amount validation (prevents fraud)
-    /// 4. Transaction logging (audit trail)
-    /// 5. IP whitelist validation (optional, for production)
+    /// API Key verification đã thực hiện tại Controller.
+    /// Payload format: https://developer.sepay.vn/sepay-webhooks/tich-hop-webhook
     /// </summary>
-    public async Task<bool> ProcessWebhookAsync(
-        SePayWebhookDto webhook,
-        string signature,
-        string rawPayload,
-        CancellationToken ct = default)
+    public async Task<bool> ProcessWebhookAsync(SePayWebhookDto webhook, CancellationToken ct = default)
     {
         var processingStartTime = DateTime.UtcNow;
 
-        // VALIDATION STEP 1: Basic payload validation
-        if (string.IsNullOrWhiteSpace(webhook.OrderId))
+        // VALIDATION: Chỉ xử lý tiền vào (transferType = "in")
+        if (!webhook.TransferType.Equals("in", StringComparison.OrdinalIgnoreCase))
         {
-            _logger.LogError("SePay webhook: OrderId is missing");
+            _logger.LogInformation("SePay webhook: Bỏ qua transferType={Type}", webhook.TransferType);
             return false;
         }
 
-        if (webhook.Amount <= 0)
+        if (webhook.TransferAmount <= 0)
         {
-            _logger.LogError("SePay webhook: Invalid amount {Amount}", webhook.Amount);
+            _logger.LogError("SePay webhook: Invalid amount {Amount}", webhook.TransferAmount);
             return false;
         }
 
-        // SECURITY STEP 2: Verify webhook signature
-        var computedSignature = ComputeHmacSHA256(rawPayload, _settings.WebhookSecret);
-        var isVerified = signature.Equals(computedSignature, StringComparison.OrdinalIgnoreCase);
+        // Trích xuất OrderId từ content (format: SMARTPARKING SP_20250223_ABC12345)
+        var orderId = ExtractOrderIdFromContent(webhook.Content) ?? webhook.Code;
+        if (string.IsNullOrWhiteSpace(orderId))
+        {
+            _logger.LogWarning("SePay webhook: Không tìm thấy OrderId trong content={Content}", webhook.Content);
+            return false;
+        }
 
-        // Log webhook with full details (ALWAYS log before any processing)
         _logger.LogInformation(
-            "SePay webhook received. OrderId: {OrderId}, TransactionId: {TransactionId}, Amount: {Amount}, Status: {Status}, Verified: {IsVerified}, PayloadLength: {PayloadLength}",
-            webhook.OrderId, webhook.TransactionId, webhook.Amount, webhook.Status, isVerified, rawPayload.Length);
+            "SePay webhook received. OrderId: {OrderId}, Id: {Id}, Amount: {Amount}, Content: {Content}",
+            orderId, webhook.Id, webhook.TransferAmount, webhook.Content);
 
-        // SECURITY: If signature is invalid, reject immediately
-        if (!isVerified)
-        {
-            _logger.LogWarning(
-                "SePay webhook signature verification FAILED. OrderId: {OrderId}, ExpectedSignature: {Expected}, ReceivedSignature: {Received}",
-                webhook.OrderId, computedSignature, signature);
-            return false;
-        }
-
-        // STEP 2: Find payment transaction
-        var payment = await _paymentRepository.GetByTxnRefAsync(webhook.OrderId, ct);
+        // Find payment transaction
+        var payment = await _paymentRepository.GetByTxnRefAsync(orderId, ct);
         if (payment == null)
         {
             _logger.LogWarning(
                 "SePay webhook: Payment not found for OrderId: {OrderId}",
-                webhook.OrderId);
+                orderId);
             return false;
         }
 
@@ -251,37 +286,31 @@ public sealed class SePayService : ISePayService
         {
             _logger.LogInformation(
                 "SePay webhook: Payment already processed. OrderId: {OrderId}, CurrentStatus: {Status}",
-                webhook.OrderId, payment.PaymentStatus);
+                orderId, payment.PaymentStatus);
 
-            // Return success if original was successful (idempotent response)
             return payment.PaymentStatus == nameof(PaymentStatus.Success);
         }
 
         // STEP 3: Validate amount (prevent fraud)
-        if (webhook.Amount != payment.Amount)
+        if (webhook.TransferAmount != payment.Amount)
         {
             _logger.LogError(
                 "SePay webhook: Amount mismatch. Expected: {Expected}, Received: {Received}, OrderId: {OrderId}",
-                payment.Amount, webhook.Amount, webhook.OrderId);
+                payment.Amount, webhook.TransferAmount, orderId);
 
             payment.PaymentStatus = nameof(PaymentStatus.Failed);
             payment.Metadata = JsonSerializer.Serialize(new
             {
                 Error = "Amount mismatch",
                 ExpectedAmount = payment.Amount,
-                ReceivedAmount = webhook.Amount
+                ReceivedAmount = webhook.TransferAmount
             });
             await _paymentRepository.UpdateAsync(payment, ct);
             return false;
         }
 
-        // STEP 4: Update payment status
-        var isSuccess = webhook.Status.Equals(PaymentConstants.SePayStatus.Success, StringComparison.OrdinalIgnoreCase);
-
-        payment.SePayTransactionId = webhook.TransactionId;
-        payment.PaymentStatus = isSuccess 
-            ? nameof(PaymentStatus.Success) 
-            : nameof(PaymentStatus.Failed);
+        // STEP 4: Cập nhật trạng thái "Đã thanh toán"
+        payment.PaymentStatus = nameof(PaymentStatus.Success);
         payment.UpdatedAt = DateTime.UtcNow;
 
         await _paymentRepository.UpdateAsync(payment, ct);
@@ -291,13 +320,13 @@ public sealed class SePayService : ISePayService
         {
             LogId = Guid.NewGuid(),
             PaymentId = payment.PaymentId,
-            RawData = rawPayload,
+            RawData = JsonSerializer.Serialize(webhook),
             CreatedAt = DateTime.UtcNow
         };
         await _paymentRepository.CreateLogAsync(log, ct);
 
-        // STEP 6: Update booking status and chuyển tiền sang owner nếu payment successful
-        if (isSuccess && payment.BookingId.HasValue && payment.PaymentType == "Booking")
+        // STEP 6: Cập nhật booking "Đã thanh toán" và chuyển tiền sang owner
+        if (payment.BookingId.HasValue && payment.PaymentType == "Booking")
         {
             var booking = await _bookingRepository.GetByIdAsync(payment.BookingId.Value, includeDeleted: false, ct);
             if (booking != null)
@@ -315,10 +344,10 @@ public sealed class SePayService : ISePayService
                 }
                 _logger.LogInformation(
                     "Booking confirmed via SePay. BookingId: {BookingId}, OrderId: {OrderId}",
-                    booking.BookingId, webhook.OrderId);
+                    booking.BookingId, orderId);
             }
         }
-        else if (isSuccess && payment.PaymentType == "Subscription" && payment.OwnerUpgradeRequestId.HasValue)
+        else if (payment.PaymentType == "Subscription" && payment.OwnerUpgradeRequestId.HasValue)
         {
             var upgradeRequest = await _ownerUpgradeRequestRepository.GetByIdAsync(payment.OwnerUpgradeRequestId.Value, ct);
             if (upgradeRequest != null && (upgradeRequest.Status == "Pending" || upgradeRequest.Status == "PendingPayment"))
@@ -329,19 +358,36 @@ public sealed class SePayService : ISePayService
 
                 _logger.LogInformation(
                     "Owner upgrade request moved to PendingApproval via SePay. RequestId: {RequestId}, OrderId: {OrderId}",
-                    upgradeRequest.RequestId, webhook.OrderId);
+                    upgradeRequest.RequestId, orderId);
             }
+        }
+        else if (payment.PaymentType == "WalletTopUp")
+        {
+            await _walletService.CreditWalletFromPaymentAsync(
+                payment.UserId,
+                payment.Amount,
+                $"Nạp tiền ví qua SePay - {orderId}",
+                ct);
+            _logger.LogInformation(
+                "Wallet top-up credit via SePay. UserId: {UserId}, Amount: {Amount}, OrderId: {OrderId}",
+                payment.UserId, payment.Amount, orderId);
         }
 
         var processingTime = (DateTime.UtcNow - processingStartTime).TotalMilliseconds;
 
         _logger.LogInformation(
-            "SePay webhook processed successfully. OrderId: {OrderId}, Status: {Status}, ProcessingTime: {ProcessingTime}ms",
-            webhook.OrderId, payment.PaymentStatus, processingTime);
+            "SePay webhook processed successfully. OrderId: {OrderId}, ProcessingTime: {ProcessingTime}ms",
+            orderId, processingTime);
 
-        // IMPORTANT: Webhook is the single source of truth
-        // ReturnUrl is ONLY for user redirect, NOT for payment confirmation
-        return isSuccess;
+        return true;
+    }
+
+    /// <summary>Trích xuất OrderId từ nội dung chuyển khoản (SMARTPARKING SP_20250223_ABC12345)</summary>
+    private static string? ExtractOrderIdFromContent(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return null;
+        var match = System.Text.RegularExpressions.Regex.Match(content, @"SMARTPARKING\s+(SP_\d{8}_[A-Z0-9]{8})", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return match.Success ? match.Groups[1].Value : null;
     }
 
     /// <summary>
@@ -379,24 +425,9 @@ public sealed class SePayService : ISePayService
 
     private void ValidateSettings()
     {
-        if (string.IsNullOrEmpty(_settings.ApiKey)) 
-            throw new InvalidOperationException("SePay ApiKey is configured incorrectly");
-            
+        if (!_settings.Enabled) return;
         if (string.IsNullOrEmpty(_settings.WebhookSecret))
-            throw new InvalidOperationException("SePay WebhookSecret is configured incorrectly");
-    }
-
-    /// <summary>
-    /// Computes HMAC SHA256 signature for webhook verification
-    /// </summary>
-    private static string ComputeHmacSHA256(string data, string secret)
-    {
-        var keyBytes = Encoding.UTF8.GetBytes(secret);
-        var dataBytes = Encoding.UTF8.GetBytes(data);
-
-        using var hmac = new HMACSHA256(keyBytes);
-        var hash = hmac.ComputeHash(dataBytes);
-        return BitConverter.ToString(hash).Replace("-", "").ToLower();
+            throw new InvalidOperationException("SePay WebhookSecret (Secret Key) chưa cấu hình. Lấy từ SePay Dashboard > Thông tin đơn vị.");
     }
 }
 

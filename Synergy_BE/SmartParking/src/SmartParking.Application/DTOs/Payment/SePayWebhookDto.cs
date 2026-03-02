@@ -3,34 +3,45 @@ using System.Text.Json.Serialization;
 namespace SmartParking.Application.DTOs.Payment;
 
 /// <summary>
-/// SePay webhook payload
-/// Received when user completes bank transfer
+/// SePay webhook payload - theo tài liệu chính thức: https://developer.sepay.vn/sepay-webhooks/tich-hop-webhook
+/// SePay gửi POST với JSON này khi có giao dịch chuyển khoản vào.
 /// </summary>
 public sealed record SePayWebhookDto
 {
-    [JsonPropertyName("order_id")]
-    public string OrderId { get; init; } = string.Empty;
+    [JsonPropertyName("id")]
+    public long Id { get; init; }
 
-    [JsonPropertyName("transaction_id")]
-    public string TransactionId { get; init; } = string.Empty;
+    [JsonPropertyName("gateway")]
+    public string Gateway { get; init; } = string.Empty;
 
-    [JsonPropertyName("amount")]
-    public decimal Amount { get; init; }
+    [JsonPropertyName("transactionDate")]
+    public string TransactionDate { get; init; } = string.Empty;
 
-    [JsonPropertyName("status")]
-    public string Status { get; init; } = string.Empty;
+    [JsonPropertyName("accountNumber")]
+    public string AccountNumber { get; init; } = string.Empty;
 
-    [JsonPropertyName("bank_code")]
-    public string? BankCode { get; init; }
+    [JsonPropertyName("code")]
+    public string? Code { get; init; }
 
-    [JsonPropertyName("bank_account")]
-    public string? BankAccount { get; init; }
+    /// <summary>Nội dung chuyển khoản - chứa mã đơn hàng (vd: SMARTPARKING SP_20250223_ABC12345)</summary>
+    [JsonPropertyName("content")]
+    public string Content { get; init; } = string.Empty;
 
-    [JsonPropertyName("transfer_content")]
-    public string? TransferContent { get; init; }
+    /// <summary>in = tiền vào, out = tiền ra</summary>
+    [JsonPropertyName("transferType")]
+    public string TransferType { get; init; } = string.Empty;
 
-    [JsonPropertyName("timestamp")]
-    public long Timestamp { get; init; }
+    [JsonPropertyName("transferAmount")]
+    public decimal TransferAmount { get; init; }
+
+    [JsonPropertyName("accumulated")]
+    public decimal Accumulated { get; init; }
+
+    [JsonPropertyName("subAccount")]
+    public string? SubAccount { get; init; }
+
+    [JsonPropertyName("referenceCode")]
+    public string ReferenceCode { get; init; } = string.Empty;
 
     [JsonPropertyName("description")]
     public string? Description { get; init; }

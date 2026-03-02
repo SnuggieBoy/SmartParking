@@ -6,6 +6,9 @@ public interface IWalletService
 {
     Task<decimal> GetBalanceAsync(Guid userId, CancellationToken ct = default);
     Task<object> TopUpAsync(Guid userId, decimal amount, CancellationToken ct = default);
+
+    /// <summary>Nạp tiền ví khi thanh toán VNPay/SePay xác nhận (PaymentType = WalletTopUp).</summary>
+    Task CreditWalletFromPaymentAsync(Guid userId, decimal amount, string description, CancellationToken ct = default);
     Task<PagedResult<WalletTransactionDto>> GetTransactionsAsync(Guid userId, int page, int pageSize, CancellationToken ct = default);
     Task<PayWithWalletResultDto> PayWithWalletAsync(Guid userId, Guid bookingId, decimal amount, CancellationToken ct = default);
     Task<PayWithWalletResultDto> PayExtensionWithWalletAsync(Guid userId, Guid bookingId, decimal extensionAmount, CancellationToken ct = default);
