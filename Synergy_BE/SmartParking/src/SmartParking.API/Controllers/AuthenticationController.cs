@@ -84,18 +84,6 @@ public sealed class AuthenticationController : BaseApiController
         return Ok(ApiResponse<AuthResponseDto>.SuccessResponse(response, Messages.Auth.LoginSuccess));
     }
 
-    [HttpPost("google")]
-    [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<ApiResponse<AuthResponseDto>>> GoogleLogin(
-        [FromBody] GoogleLoginRequest request,
-        CancellationToken ct)
-    {
-        var dto = new GoogleLoginRequestDto(request.GoogleToken);
-        var response = await _authService.GoogleLoginAsync(dto, ct);
-        return Ok(ApiResponse<AuthResponseDto>.SuccessResponse(response, Messages.Auth.LoginSuccess));
-    }
-
     [HttpPost("refresh")]
     [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status401Unauthorized)]

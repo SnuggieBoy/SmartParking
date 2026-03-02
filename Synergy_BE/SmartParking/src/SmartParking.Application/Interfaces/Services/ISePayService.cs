@@ -28,6 +28,7 @@ public interface ISePayService
     /// <summary>
     /// Processes SePay webhook callback.
     /// SECURITY: API Key verification done tại Controller trước khi gọi.
+    /// Returns (success, errorReason) - errorReason only when success=false.
     /// </summary>
-    Task<bool> ProcessWebhookAsync(SePayWebhookDto webhook, CancellationToken ct = default);
+    Task<(bool Success, string? ErrorReason)> ProcessWebhookAsync(SePayWebhookDto webhook, CancellationToken ct = default);
 }

@@ -12,13 +12,11 @@ namespace SmartParking.API.Controllers;
 public sealed class WalletController : BaseApiController
 {
     private readonly IWalletService _walletService;
-    private readonly IVnPayService _vnPayService;
     private readonly ISePayService _sePayService;
 
-    public WalletController(IWalletService walletService, IVnPayService vnPayService, ISePayService sePayService)
+    public WalletController(IWalletService walletService, ISePayService sePayService)
     {
         _walletService = walletService;
-        _vnPayService = vnPayService;
         _sePayService = sePayService;
     }
 
@@ -39,17 +37,6 @@ public sealed class WalletController : BaseApiController
         var userId = GetUserIdFromToken();
         var result = await _walletService.TopUpAsync(userId, request.Amount, ct);
         return Ok(ApiResponse<object>.SuccessResponse(result, "Top-up successful"));
-    }
-
-    [HttpPost("topup-vnpay")]
-    [ProducesResponseType(typeof(ApiResponse<PaymentResponseDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<ApiResponse<PaymentResponseDto>>> TopUpVnPay([FromBody] WalletTopUpRequest request, CancellationToken ct = default)
-    {
-        var userId = GetUserIdFromToken();
-        var dto = new WalletTopUpRequestDto(request.Amount, request.Description ?? "Nạp tiền ví SmartParking");
-        var result = await _vnPayService.CreateWalletTopUpPaymentUrlAsync(dto, userId, ct);
-        return Ok(ApiResponse<PaymentResponseDto>.SuccessResponse(result, "VNPay URL created"));
     }
 
     [HttpPost("topup-sepay")]

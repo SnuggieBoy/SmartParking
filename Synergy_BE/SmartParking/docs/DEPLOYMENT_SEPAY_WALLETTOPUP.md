@@ -40,21 +40,12 @@ Các thay đổi SePay + WalletTopUp **không yêu cầu** thêm cột hay bản
 https://YOUR_APP.azurewebsites.net/api/payments/sepay/webhook
 ```
 
-### 2.2 VNPay (cho nạp ví + booking)
-
-| Key | Production |
-|-----|------------|
-| `VnPay:ReturnUrl` | `https://YOUR_APP.azurewebsites.net/api/payments/vnpay-callback` |
-| `VnPay:TmnCode` | Mã merchant production |
-| `VnPay:HashSecret` | Hash secret production |
-
 ---
 
 ## 3. Các API mới
 
 | Method | Endpoint | Mô tả |
 |--------|----------|-------|
-| POST | `/api/wallet/topup-vnpay` | Tạo URL thanh toán VNPay để nạp ví |
 | POST | `/api/wallet/topup-sepay` | Tạo thông tin chuyển khoản SePay để nạp ví |
 
 ---
@@ -62,7 +53,6 @@ https://YOUR_APP.azurewebsites.net/api/payments/sepay/webhook
 ## 4. Mobile / Web – URL cần cập nhật
 
 - **API Base URL:** Trỏ về `https://YOUR_APP.azurewebsites.net`
-- **VNPay ReturnUrl:** Đã cấu hình ở backend
 - **Deep link (mobile):** `synergy://payment-result` hoặc custom scheme
 
 ---

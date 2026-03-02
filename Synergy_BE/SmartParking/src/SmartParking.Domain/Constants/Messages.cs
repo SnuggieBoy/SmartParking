@@ -14,11 +14,9 @@ public static class Messages
         public const string AccountInactive = "Account is inactive";
         public const string InvalidToken = "Invalid or expired token";
         public const string RoleNotFound = "Role not found";
-        public const string InvalidGoogleToken = "Invalid Google token";
         public const string PasswordChangedSuccess = "Password changed successfully";
         public const string OldPasswordIncorrect = "Old password is incorrect";
         public const string NewPasswordSameAsOld = "New password must be different from old password";
-        public const string CannotChangeGooglePassword = "Cannot change password for Google account";
         
         // OTP Verification Messages
         public const string OtpSentSuccess = "OTP has been sent to your email. Please check your inbox.";

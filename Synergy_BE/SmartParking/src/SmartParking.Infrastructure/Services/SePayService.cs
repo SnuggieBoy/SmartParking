@@ -244,7 +244,7 @@ public sealed class SePayService : ISePayService
     /// API Key verification đã thực hiện tại Controller.
     /// Payload format: https://developer.sepay.vn/sepay-webhooks/tich-hop-webhook
     /// </summary>
-    public async Task<bool> ProcessWebhookAsync(SePayWebhookDto webhook, CancellationToken ct = default)
+    public async Task<(bool Success, string? ErrorReason)> ProcessWebhookAsync(SePayWebhookDto webhook, CancellationToken ct = default)
     {
         var processingStartTime = DateTime.UtcNow;
 
@@ -252,21 +252,23 @@ public sealed class SePayService : ISePayService
         if (!webhook.TransferType.Equals("in", StringComparison.OrdinalIgnoreCase))
         {
             _logger.LogInformation("SePay webhook: Bỏ qua transferType={Type}", webhook.TransferType);
-            return false;
+            return (false, $"transferType={webhook.TransferType}, expected 'in'");
         }
 
         if (webhook.TransferAmount <= 0)
         {
             _logger.LogError("SePay webhook: Invalid amount {Amount}", webhook.TransferAmount);
-            return false;
+            return (false, $"Invalid amount: {webhook.TransferAmount}");
         }
 
-        // Trích xuất OrderId từ content (format: SMARTPARKING SP_20250223_ABC12345)
-        var orderId = ExtractOrderIdFromContent(webhook.Content) ?? webhook.Code;
+        // Trích xuất OrderId từ content hoặc description (format: SMARTPARKING SP_20250223_ABC12345)
+        var orderId = ExtractOrderIdFromContent(webhook.Content)
+            ?? ExtractOrderIdFromContent(webhook.Description ?? "")
+            ?? webhook.Code;
         if (string.IsNullOrWhiteSpace(orderId))
         {
-            _logger.LogWarning("SePay webhook: Không tìm thấy OrderId trong content={Content}", webhook.Content);
-            return false;
+            _logger.LogWarning("SePay webhook: Không tìm thấy OrderId. Content={Content}, Description={Desc}", webhook.Content, webhook.Description);
+            return (false, $"OrderId not found in content. Content='{webhook.Content}'");
         }
 
         _logger.LogInformation(
@@ -280,7 +282,7 @@ public sealed class SePayService : ISePayService
             _logger.LogWarning(
                 "SePay webhook: Payment not found for OrderId: {OrderId}",
                 orderId);
-            return false;
+            return (false, $"Payment not found for OrderId: {orderId}. Ensure you created payment via app first.");
         }
 
         // SECURITY: Idempotency check - prevent duplicate processing
@@ -290,11 +292,12 @@ public sealed class SePayService : ISePayService
                 "SePay webhook: Payment already processed. OrderId: {OrderId}, CurrentStatus: {Status}",
                 orderId, payment.PaymentStatus);
 
-            return payment.PaymentStatus == nameof(PaymentStatus.Success);
+            var alreadyOk = payment.PaymentStatus == nameof(PaymentStatus.Success);
+            return (alreadyOk, alreadyOk ? null : $"Payment already {payment.PaymentStatus}");
         }
 
-        // STEP 3: Validate amount (prevent fraud)
-        if (webhook.TransferAmount != payment.Amount)
+        // STEP 3: Validate amount (prevent fraud) - dung tolerance 1 VND cho lam tron
+        if (Math.Abs(webhook.TransferAmount - payment.Amount) > 1)
         {
             _logger.LogError(
                 "SePay webhook: Amount mismatch. Expected: {Expected}, Received: {Received}, OrderId: {OrderId}",
@@ -308,7 +311,7 @@ public sealed class SePayService : ISePayService
                 ReceivedAmount = webhook.TransferAmount
             });
             await _paymentRepository.UpdateAsync(payment, ct);
-            return false;
+            return (false, $"Amount mismatch. Expected: {payment.Amount}, Received: {webhook.TransferAmount}");
         }
 
         // STEP 4: Cập nhật trạng thái "Đã thanh toán"
@@ -381,15 +384,22 @@ public sealed class SePayService : ISePayService
             "SePay webhook processed successfully. OrderId: {OrderId}, ProcessingTime: {ProcessingTime}ms",
             orderId, processingTime);
 
-        return true;
+        return (true, null);
     }
 
-    /// <summary>Trích xuất OrderId từ nội dung chuyển khoản (SMARTPARKING SP_20250223_ABC12345)</summary>
+    /// <summary>Trích xuất OrderId từ nội dung chuyển khoản.
+    /// SePay/SMS có thể gửi: SMARTPARKING SP202603022F9F2012 (không gạch dưới) hoặc SMARTPARKING SP_20260302_2F9F2012
+    /// Chuẩn hóa về SP_yyyyMMdd_xxxx để tra cứu trong DB.</summary>
     private static string? ExtractOrderIdFromContent(string content)
     {
         if (string.IsNullOrWhiteSpace(content)) return null;
-        var match = System.Text.RegularExpressions.Regex.Match(content, @"SMARTPARKING\s+(SP_\d{8}_[A-Z0-9]{8})", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        return match.Success ? match.Groups[1].Value : null;
+        // Format 1: SMARTPARKING SP_20260302_2F9F2012 (co gach duoi)
+        var m1 = System.Text.RegularExpressions.Regex.Match(content, @"SMARTPARKING\s+(SP_\d{8}_[A-Z0-9]{6,8})", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (m1.Success) return m1.Groups[1].Value;
+        // Format 2: SMARTPARKING SP202603022F9F2012 (khong gach duoi - tu SMS/SePay)
+        var m2 = System.Text.RegularExpressions.Regex.Match(content, @"SMARTPARKING\s+(SP)(\d{8})([A-Z0-9]{6,8})", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (m2.Success) return $"{m2.Groups[1].Value}_{m2.Groups[2].Value}_{m2.Groups[3].Value}";
+        return null;
     }
 
     /// <summary>

@@ -1,6 +1,6 @@
 # SmartParking - Deployment Security Checklist
 
-> **QUAN TRỌNG**: Trước khi deploy (VNPay, production), kiểm tra toàn bộ mục dưới đây.
+> **QUAN TRỌNG**: Trước khi deploy (production), kiểm tra toàn bộ mục dưới đây.
 
 ---
 
@@ -9,7 +9,6 @@
 ### Không được commit vào Git:
 - `JwtSettings:SecretKey`
 - `CloudinarySettings:ApiSecret` (và ApiKey nếu nhạy cảm)
-- `VnPay:TmnCode`, `VnPay:HashSecret`
 - `SePay:ApiKey`, `SePay:WebhookSecret`, `SePay:Bank:AccountNumber`
 - `GoogleOAuth:ClientSecret`
 - `EmailSettings:SmtpPassword`
@@ -27,11 +26,6 @@ CloudinarySettings__CloudName=dogogoyuj
 CloudinarySettings__ApiKey=334596456671864
 CloudinarySettings__ApiSecret=your-cloudinary-api-secret
 
-# VNPay (Production)
-VnPay__TmnCode=your-vnpay-merchant-code
-VnPay__HashSecret=your-vnpay-hash-secret
-VnPay__ReturnUrl=https://yourdomain.com/api/payments/vnpay-callback
-
 # Database
 ConnectionStrings__DefaultConnection=Server=...;Database=...;User Id=...;Password=...;
 
@@ -47,23 +41,12 @@ cd Synergy_BE/SmartParking/src/SmartParking.API
 dotnet user-secrets set "CloudinarySettings:ApiSecret" "your-secret"
 dotnet user-secrets set "CloudinarySettings:ApiKey" "334596456671864"
 dotnet user-secrets set "JwtSettings:SecretKey" "your-jwt-secret-min-32-chars"
-dotnet user-secrets set "VnPay:HashSecret" "your-vnpay-secret"
-dotnet user-secrets set "VnPay:TmnCode" "your-tmn-code"
 # Hoặc dùng file .env (load bằng dotenv) - xem .env.example
 ```
 
 ---
 
-## 2. VNPay Production
-
-- Đổi `PaymentUrl` sang production: `https://vnpayment.vn/paymentv2/vpcpay.html`
-- `ReturnUrl` phải là HTTPS và domain thật (VD: `https://api.yourdomain.com/api/payments/vnpay-callback`)
-- `TmnCode` và `HashSecret` lấy từ VNPay merchant portal
-- **Không** commit TmnCode, HashSecret vào Git
-
----
-
-## 3. Mobile (Expo)
+## 2. Mobile (Expo)
 
 - `EXPO_PUBLIC_API_URL` - URL backend production (HTTPS)
 - `EXPO_PUBLIC_API_URL_WEB` - URL cho web build
@@ -110,7 +93,7 @@ git commit -m "Stop tracking appsettings.Development.json (contains secrets)"
 ## 8. Kiểm tra trước deploy
 
 - [ ] Đã xóa/ẩn tất cả secret khỏi appsettings.json commit
-- [ ] VNPay ReturnUrl đúng domain production
+- [ ] SePay Webhook URL đúng domain production
 - [ ] Database connection string dùng env var
 - [ ] JWT SecretKey >= 32 ký tự, random
 - [ ] Cloudinary ApiSecret từ env

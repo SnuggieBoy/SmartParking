@@ -60,7 +60,7 @@ public sealed class PaymentService : IPaymentService
             bookingId,
             payment.Amount,
             payment.PaymentStatus ?? nameof(PaymentStatus.Pending),
-            payment.PaymentMethod ?? PaymentConstants.VnPayProvider,
+            payment.PaymentMethod ?? "Unknown",
             paidAt
         );
     }

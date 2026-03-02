@@ -7,108 +7,31 @@ using SmartParking.Application.DTOs.Payment;
 using SmartParking.Application.DTOs.User;
 using SmartParking.Application.Interfaces.Services;
 using SmartParking.Domain.Constants;
-using System.Text;
 
 namespace SmartParking.API.Controllers;
 
 /// <summary>
 /// Payment processing endpoints.
-/// Security: Users process own payments. VNPay callback is public but hash-validated.
+/// Security: Users process own payments. SePay webhook is public but API key validated.
 /// </summary>
 [Route("api/payments")]
 public sealed class PaymentController : BaseApiController
 {
-    private readonly IVnPayService _vnPayService;
     private readonly ISePayService _sePayService;
     private readonly IPaymentService _paymentService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<PaymentController> _logger;
 
     public PaymentController(
-        IVnPayService vnPayService,
         ISePayService sePayService,
         IPaymentService paymentService,
         IConfiguration configuration,
         ILogger<PaymentController> logger)
     {
-        _vnPayService = vnPayService;
         _sePayService = sePayService;
         _paymentService = paymentService;
         _configuration = configuration;
         _logger = logger;
-    }
-
-    /// <summary>
-    /// SECURITY: Only authenticated users can create payments for their own bookings.
-    /// Ownership validated in service layer.
-    /// </summary>
-    [Authorize(Policy = AuthorizationPolicies.UserOrOwnerOrAdmin)]
-    [HttpPost("create")]
-    [ProducesResponseType(typeof(ApiResponse<PaymentResponseDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<PaymentResponseDto>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiResponse<PaymentResponseDto>), StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<ApiResponse<PaymentResponseDto>>> CreatePayment(
-        [FromBody] CreatePaymentRequest request,
-        CancellationToken ct)
-    {
-        var userId = GetUserIdFromToken();
-
-        var dto = new CreatePaymentRequestDto(
-            request.BookingId,
-            request.Amount,
-            request.Description
-        );
-
-        var response = await _vnPayService.CreatePaymentUrlAsync(dto, userId, ct);
-        return Ok(ApiResponse<PaymentResponseDto>.SuccessResponse(response, Messages.Payment.CreateSuccess));
-    }
-
-    /// <summary>
-    /// SECURITY: Only authenticated users can pay for their owner upgrade requests.
-    /// Ownership validated in service layer.
-    /// </summary>
-    [Authorize(Policy = AuthorizationPolicies.UserOrOwnerOrAdmin)]
-    [HttpPost("owner-subscription/vnpay")]
-    [ProducesResponseType(typeof(ApiResponse<PaymentResponseDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<PaymentResponseDto>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiResponse<PaymentResponseDto>), StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<ApiResponse<PaymentResponseDto>>> CreateOwnerSubscriptionPayment(
-        [FromBody] CreateOwnerSubscriptionPaymentRequest request,
-        CancellationToken ct)
-    {
-        var userId = GetUserIdFromToken();
-
-        var dto = new CreateOwnerSubscriptionPaymentDto(
-            request.OwnerUpgradeRequestId,
-            request.PlanType,
-            request.Description
-        );
-
-        var response = await _vnPayService.CreateOwnerSubscriptionPaymentUrlAsync(dto, userId, ct);
-        return Ok(ApiResponse<PaymentResponseDto>.SuccessResponse(response, "Owner subscription payment URL created"));
-    }
-
-    /// <summary>
-    /// VNPAY CALLBACK: Public endpoint called by VNPay after payment.
-    /// SECURITY CRITICAL:
-    /// - [AllowAnonymous] required (VNPay cannot send JWT)
-    /// - SecureHash MUST be validated to prevent tampering
-    /// - Idempotency check prevents duplicate processing
-    /// - Never trust callback data without hash validation
-    /// </summary>
-    [AllowAnonymous]
-    [HttpGet("vnpay-callback")]
-    [ProducesResponseType(StatusCodes.Status302Found)]
-    public async Task<IActionResult> VnPayCallback([FromQuery] VnPayCallbackDto callback, CancellationToken ct)
-    {
-        var isSuccess = await _vnPayService.ProcessCallbackAsync(callback, ct);
-
-        if (isSuccess)
-        {
-            return Redirect($"/payment-success?txnRef={callback.vnp_TxnRef}");
-        }
-
-        return Redirect($"/payment-failed?txnRef={callback.vnp_TxnRef}");
     }
 
     /// <summary>
@@ -212,26 +135,30 @@ public sealed class PaymentController : BaseApiController
                 "SePay webhook received. RequestId: {RequestId}, Id: {Id}, Content: {Content}, ClientIP: {ClientIP}",
                 requestId, webhook.Id, webhook.Content, clientIp);
 
-            // SECURITY: Kiểm tra Secret Key trong Header - SePay gửi: Authorization: Apikey {API_KEY}
+            // SECURITY: SePay gửi header "Authorization: Apikey {API_KEY}" - dùng ApiKey hoặc WebhookSecret
             var authHeader = Request.Headers["Authorization"].FirstOrDefault();
-            var expectedSecret = _configuration["SePay:WebhookSecret"] ?? Environment.GetEnvironmentVariable("SEPAY_WEBHOOK_SECRET");
+            var apiKey = (_configuration["SePay:ApiKey"] ?? Environment.GetEnvironmentVariable("SEPAY_API_KEY") ?? "").Trim();
+            var webhookSecret = (_configuration["SePay:WebhookSecret"] ?? Environment.GetEnvironmentVariable("SEPAY_WEBHOOK_SECRET") ?? "").Trim();
+            var expectedSecret = !string.IsNullOrEmpty(webhookSecret) ? webhookSecret : apiKey;
             if (string.IsNullOrEmpty(expectedSecret))
             {
-                _logger.LogError("SePay WebhookSecret chưa cấu hình");
+                _logger.LogError("SePay ApiKey/WebhookSecret chưa cấu hình");
                 return StatusCode(500, new { success = false, message = "Server not configured" });
             }
 
-            var isValidAuth = !string.IsNullOrEmpty(authHeader) &&
-                authHeader.StartsWith("Apikey ", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(authHeader["Apikey ".Length..].Trim(), expectedSecret.Trim(), StringComparison.Ordinal);
+            var receivedKey = authHeader?.StartsWith("Apikey ", StringComparison.OrdinalIgnoreCase) == true
+                ? authHeader["Apikey ".Length..].Trim()
+                : null;
+            var isValidAuth = !string.IsNullOrEmpty(receivedKey) &&
+                string.Equals(receivedKey, expectedSecret, StringComparison.Ordinal);
 
             if (!isValidAuth)
             {
-                _logger.LogWarning("SePay webhook: Authorization FAILED. Header present: {HasHeader}", !string.IsNullOrEmpty(authHeader));
+                _logger.LogWarning("SePay webhook: Authorization FAILED. HasHeader: {HasHeader}, Content: {Content}", !string.IsNullOrEmpty(authHeader), webhook?.Content ?? "null");
                 return Unauthorized(new { success = false, message = "Invalid API Key" });
             }
 
-            var isSuccess = await _sePayService.ProcessWebhookAsync(webhook, ct);
+            var (isSuccess, errorReason) = await _sePayService.ProcessWebhookAsync(webhook, ct);
 
             if (isSuccess)
             {
@@ -239,13 +166,13 @@ public sealed class PaymentController : BaseApiController
                 return Ok(new { success = true, message = "Webhook processed successfully", requestId });
             }
 
-            _logger.LogWarning("SePay webhook processing failed. RequestId: {RequestId}", requestId);
-            return BadRequest(new { success = false, message = "Webhook processing failed", requestId });
+            _logger.LogWarning("SePay webhook failed. RequestId: {RequestId}, Reason: {Reason}", requestId, errorReason);
+            return BadRequest(new { success = false, message = "Webhook processing failed", reason = errorReason ?? "Unknown", requestId });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "SePay webhook exception. RequestId: {RequestId}, ClientIP: {ClientIP}", requestId, clientIp);
-            return Ok(new { success = false, message = "Webhook received but processing failed", requestId });
+            _logger.LogError(ex, "SePay webhook exception. RequestId: {RequestId}, Content: {Content}, ClientIP: {ClientIP}", requestId, webhook?.Content ?? "null", clientIp);
+            return StatusCode(500, new { success = false, message = "Webhook processing error - SePay will retry", requestId });
         }
     }
 

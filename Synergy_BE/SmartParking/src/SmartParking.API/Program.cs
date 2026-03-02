@@ -58,31 +58,6 @@ static void ValidateSecrets(IConfiguration configuration, IWebHostEnvironment en
         errors.Add("JwtSettings:SecretKey appears to be a placeholder. Generate a secure random secret.");
     }
 
-    // Validate VNPay credentials (production only). Có thể bỏ qua bằng SKIP_VNPAY_VALIDATION=true khi deploy lần đầu
-    if (environment.IsProduction() && !string.Equals(Environment.GetEnvironmentVariable("SKIP_VNPAY_VALIDATION"), "true", StringComparison.OrdinalIgnoreCase))
-    {
-        var vnpayTmn = configuration["VnPay:TmnCode"];
-        var vnpaySecret = configuration["VnPay:HashSecret"];
-
-        if (string.IsNullOrWhiteSpace(vnpayTmn))
-        {
-            errors.Add("VnPay:TmnCode is not configured. Set VnPay__TmnCode in Azure App Settings, or SKIP_VNPAY_VALIDATION=true for initial deploy.");
-        }
-        else if (vnpayTmn.Contains("YOUR_"))
-        {
-            errors.Add("VnPay:TmnCode appears to be a placeholder. Get sandbox credentials from vnpay.vn");
-        }
-
-        if (string.IsNullOrWhiteSpace(vnpaySecret))
-        {
-            errors.Add("VnPay:HashSecret is not configured. Set VnPay__HashSecret in Azure App Settings.");
-        }
-        else if (vnpaySecret.Contains("YOUR_"))
-        {
-            errors.Add("VnPay:HashSecret appears to be a placeholder.");
-        }
-    }
-
     if (errors.Any())
     {
         var errorMessage = string.Join(Environment.NewLine, errors);

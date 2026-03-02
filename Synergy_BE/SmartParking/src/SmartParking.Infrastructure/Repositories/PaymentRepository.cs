@@ -18,7 +18,7 @@ public sealed class PaymentRepository : IPaymentRepository
     public async Task<PaymentTransaction?> GetByTxnRefAsync(string txnRef, CancellationToken ct = default)
     {
         return await _context.PaymentTransactions
-            .Where(p => p.VnpTxnRef == txnRef && !p.IsDeleted)
+            .Where(p => !p.IsDeleted && (p.VnpTxnRef == txnRef || p.SePayOrderId == txnRef))
             .FirstOrDefaultAsync(ct);
     }
 

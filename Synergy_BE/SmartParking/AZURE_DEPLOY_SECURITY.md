@@ -3,7 +3,7 @@
 ## ⚠️ Trước khi publish
 
 Các file sau **KHÔNG** được đưa lên production (đã cấu hình exclude):
-- `appsettings.Development.json` – chứa secret thật (DB, JWT, Google, VnPay, SePay, Email)
+- `appsettings.Development.json` – chứa secret thật (DB, JWT, Google, SePay, Email)
 
 File `appsettings.json` chỉ chứa placeholder. **Bắt buộc** cấu hình trong Azure Portal.
 
@@ -26,16 +26,12 @@ Vào **SmartParkingExe** > **Configuration** > **Application settings** và **Co
 | `JwtSettings__SecretKey` | Chuỗi bí mật ≥ 32 ký tự (dùng cho JWT) |
 | `ASPNETCORE_ENVIRONMENT` | `Production` |
 
-### 3. Application Settings – VNPay (sandbox mới)
+### 3. Application Settings – SePay
 
-**Lưu ý:** Azure dùng **2 dấu gạch dưới** `__` (không phải `_`). Nếu đã tạo `VnPay_TmnCode` thì xóa và tạo lại thành `VnPay__TmnCode`.
+**Lưu ý:** Azure dùng **2 dấu gạch dưới** `__` (không phải `_`).
 
 | Name | Value |
 |------|-------|
-| `VnPay__TmnCode` | `0Q5Y0WQ7` |
-| `VnPay__HashSecret` | `T7NHMKVRL4N9FEHDMUU1I52ZC9NBZQIM` |
-| `VnPay__PaymentUrl` | `https://sandbox.vnpayment.vn/paymentv2/vpcpay.html` |
-| `VnPay__ReturnUrl` | `https://smartparkingexe.azurewebsites.net/api/payments/vnpay-callback` |
 | `SePay__ApiKey` | API key từ SePay |
 | `SePay__WebhookSecret` | Webhook secret từ SePay |
 | `SePay__MerchantId` | Merchant ID từ SePay |
@@ -44,14 +40,21 @@ Vào **SmartParkingExe** > **Configuration** > **Application settings** và **Co
 | `SePay__Urls__ReturnUrl` | `https://smartparkingexe.azurewebsites.net/payment/sepay-return` |
 | `SePay__Urls__WebhookUrl` | `https://smartparkingexe.azurewebsites.net/api/payments/sepay/webhook` |
 
-### 4. Deploy lần đầu chưa có VNPay
+### 4. SePay Webhook – CẤU HÌNH BẮT BUỘC (ví không cập nhật nếu thiếu)
 
-Nếu chưa cấu hình VNPay, thêm:
-| Name | Value |
-|------|-------|
-| `SKIP_VNPAY_VALIDATION` | `true` |
+**Quan trọng:** Chuyển khoản SePay thành công nhưng ví không cập nhật → thường do **chưa cấu hình Webhook trong SePay**.
 
-Sau khi cấu hình xong VNPay, xóa setting này.
+1. Đăng nhập [my.sepay.vn](https://my.sepay.vn) → **WebHooks** → **+ Add webhooks**
+2. Điền:
+   - **Name:** SmartParking
+   - **Event:** Money in (Tiền vào)
+   - **Webhook URL:** `https://smartparkingexe.azurewebsites.net/api/payments/sepay/webhook`
+   - **Authentication:** API Key → nhập **Secret Key** (từ Thông tin đơn vị) hoặc **ApiKey**
+3. **Payment Code:** Bỏ chọn "Ignore if transaction content does not contain payment code" HOẶC cấu hình Payment Code nhận dạng `SMARTPARKING` / `SP_`
+4. **Bank account:** Chọn đúng tài khoản nhận tiền (hoặc để trống nếu nhận mọi TK)
+5. Lưu và kiểm tra **WebHooks Log** sau khi CK thử
+
+**Azure App Settings:** `SePay__ApiKey` hoặc `SePay__WebhookSecret` phải khớp với key dùng khi tạo webhook.
 
 ---
 

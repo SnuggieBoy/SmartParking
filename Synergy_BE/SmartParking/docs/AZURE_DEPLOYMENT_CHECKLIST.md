@@ -33,16 +33,7 @@ Hoặc chạy thủ công các script trong `docs/`:
 - [ ] `JwtSettings:ValidIssuer` – URL API (ví dụ: `https://your-api.azurewebsites.net`)
 - [ ] `JwtSettings:ValidAudience` – giống ValidIssuer hoặc frontend URL
 
-### 2.2 VNPay
-
-- [ ] `VnPay:TmnCode`
-- [ ] `VnPay:HashSecret`
-- [ ] `VnPay:ReturnUrl` – **phải trỏ về URL Azure**, ví dụ:
-  ```
-  https://your-api.azurewebsites.net/api/payments/vnpay-callback
-  ```
-
-### 2.3 SePay (nếu dùng)
+### 2.2 SePay (nếu dùng)
 
 - [ ] `SePay:WebhookSecret`
 - [ ] Webhook URL cấu hình trên SePay dashboard trỏ về:
@@ -50,7 +41,7 @@ Hoặc chạy thủ công các script trong `docs/`:
   https://your-api.azurewebsites.net/api/payments/sepay/webhook
   ```
 
-### 2.4 Email (OTP, Reset Password)
+### 2.3 Email (OTP, Reset Password)
 
 - [ ] SMTP hoặc Email provider config cho môi trường production
 

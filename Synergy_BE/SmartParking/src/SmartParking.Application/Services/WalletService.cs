@@ -268,7 +268,7 @@ public sealed class WalletService : IWalletService
     {
         if (amount <= 0) return false;
 
-        // Tránh chuyển trùng nếu đã chuyển từ PayWithWallet/VnPay/SePay
+        // Tránh chuyển trùng nếu đã chuyển từ PayWithWallet/SePay
         if (await _walletRepository.HasBookingIncomeForBookingAsync(bookingId, ct))
             return true;
 

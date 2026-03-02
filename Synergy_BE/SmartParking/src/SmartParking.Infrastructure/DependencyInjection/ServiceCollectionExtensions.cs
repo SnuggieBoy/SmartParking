@@ -42,7 +42,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserWalletRepository, UserWalletRepository>();
 
         // Services
-        services.AddScoped<IVnPayService, VnPayService>();
         services.AddScoped<ISePayService, SePayService>();
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IDashboardService, DashboardService>();

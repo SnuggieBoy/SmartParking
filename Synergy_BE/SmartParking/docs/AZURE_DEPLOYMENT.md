@@ -18,7 +18,6 @@ Tham khảo cấu hình TechStore (`TechStore.API`) đã deploy thành công.
 
 - Connection string Azure SQL
 - JWT SecretKey (ít nhất 32 ký tự)
-- VnPay: TmnCode, HashSecret (nếu dùng thanh toán)
 - Cloudinary: CloudName, ApiKey, ApiSecret (nếu dùng upload ảnh)
 
 ---
@@ -60,10 +59,6 @@ Vào App Service > Configuration > Application settings, thêm:
 |------|-------|---------|
 | `ConnectionStrings__DefaultConnection` | *(connection string Azure SQL)* | Dấu `__` thay cho `:` |
 | `JwtSettings__SecretKey` | *(chuỗi bí mật ≥32 ký tự)* | **Bắt buộc** |
-| `VnPay__TmnCode` | *(mã merchant VNPay sandbox)* | Bắt buộc trừ khi set `SKIP_VNPAY_VALIDATION=true` |
-| `VnPay__HashSecret` | *(hash secret VNPay)* | Cùng với TmnCode |
-| `SKIP_VNPAY_VALIDATION` | `true` | Tùy chọn: bỏ qua kiểm tra VnPay khi deploy lần đầu (thêm sau) |
-| `VnPay__ReturnUrl` | `https://YOUR_APP.azurewebsites.net/api/payments/vnpay-callback` | Thay YOUR_APP |
 | `CloudinarySettings__CloudName` | *(cloud name)* | Nếu dùng upload ảnh |
 | `CloudinarySettings__ApiKey` | *(api key)* | |
 | `CloudinarySettings__ApiSecret` | *(api secret)* | |
@@ -119,7 +114,6 @@ EXPO_PUBLIC_API_URL=https://YOUR_APP.azurewebsites.net
 - **Không** commit `appsettings.Production.json` có secret thật vào Git
 - Dùng Azure Key Vault cho production (nâng cao)
 - JWT SecretKey: dùng `openssl rand -base64 32` để tạo
-- VnPay HashSecret: lấy từ merchant VNPay
 
 ---
 

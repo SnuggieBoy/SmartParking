@@ -16,7 +16,6 @@ public sealed class AuthenticationService : IAuthenticationService
     private readonly IRoleRepository _roleRepository;
     private readonly IJwtTokenService _jwtService;
     private readonly IPasswordHasher _passwordHasher;
-    private readonly IGoogleAuthService _googleAuthService;
     private readonly IEmailOtpRepository _emailOtpRepository;
 
     private readonly IEmailService _emailService;
@@ -33,8 +32,6 @@ public sealed class AuthenticationService : IAuthenticationService
         IRoleRepository roleRepository,
         IJwtTokenService jwtService,
         IPasswordHasher passwordHasher,
-        IGoogleAuthService googleAuthService,
-
         IEmailOtpRepository emailOtpRepository,
         IEmailService emailService,
         ILogger<AuthenticationService> logger)
@@ -45,7 +42,6 @@ public sealed class AuthenticationService : IAuthenticationService
         _roleRepository = roleRepository;
         _jwtService = jwtService;
         _passwordHasher = passwordHasher;
-        _googleAuthService = googleAuthService;
         _emailOtpRepository = emailOtpRepository;
 
         _emailService = emailService;
@@ -288,80 +284,6 @@ public sealed class AuthenticationService : IAuthenticationService
         if (!user.EmailConfirmed)
         {
             throw new UnauthorizedException(Messages.Auth.EmailNotVerified);
-        }
-
-        return await GenerateAuthResponse(user, ct);
-    }
-
-    public async Task<AuthResponseDto> GoogleLoginAsync(GoogleLoginRequestDto request, CancellationToken ct = default)
-    {
-        var googleUser = await _googleAuthService.ValidateGoogleTokenAsync(request.GoogleToken, ct);
-        if (googleUser == null)
-        {
-            throw new UnauthorizedException(Messages.Auth.InvalidGoogleToken);
-        }
-
-        var userAuth = await _userAuthRepository.GetByProviderUserIdAsync(AuthConstants.GoogleProvider, googleUser.GoogleUserId, ct);
-        
-        User? user;
-        if (userAuth != null)
-        {
-            user = userAuth.User;
-            if (user?.IsActive != true)
-            {
-                throw new UnauthorizedException(Messages.Auth.AccountInactive);
-            }
-        }
-        else
-        {
-            // Check if user already exists by email (matching eduprompt logic)
-            user = await _userRepository.GetByEmailAsync(googleUser.Email, ct);
-            
-            if (user == null)
-            {
-                // Create new user if not found
-                var userRole = await _roleRepository.GetByNameAsync(AuthConstants.Roles.User, ct);
-                if (userRole == null)
-                {
-                    throw new NotFoundException(Messages.Auth.RoleNotFound);
-                }
-
-                user = new User
-                {
-                    UserId = Guid.NewGuid(),
-                    FullName = googleUser.Name,
-                    Email = googleUser.Email,
-                    Phone = string.Empty,
-                    RoleId = userRole.RoleId,
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                user = await _userRepository.CreateAsync(user, ct);
-                user.Role = userRole;
-            }
-            else if (user.IsActive != true)
-            {
-                throw new UnauthorizedException(Messages.Auth.AccountInactive);
-            }
-
-            // Create new UserAuth record to link this Google account to the user
-            userAuth = new UserAuth
-            {
-                AuthId = Guid.NewGuid(),
-                UserId = user.UserId,
-                Provider = AuthConstants.GoogleProvider,
-                ProviderUserId = googleUser.GoogleUserId,
-                PasswordHash = null,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            await _userAuthRepository.CreateAsync(userAuth, ct);
-        }
-
-        if (user!.Role == null)
-        {
-            user.Role = await _roleRepository.GetByIdAsync(user.RoleId, ct);
         }
 
         return await GenerateAuthResponse(user, ct);

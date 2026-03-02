@@ -12,8 +12,6 @@ public static class ServiceCollectionExtensions
     {
         // Settings
         services.Configure<JwtSettings>(configuration.GetSection("JwtSettings"));
-        services.Configure<GoogleOAuthSettings>(configuration.GetSection("GoogleOAuth"));
-        services.Configure<VnPaySettings>(configuration.GetSection("VnPay"));
         services.Configure<CommissionSettings>(configuration.GetSection("CommissionSettings"));
         services.Configure<OwnerSubscriptionSettings>(configuration.GetSection("OwnerSubscriptionSettings"));
 
@@ -30,8 +28,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IOwnerBankAccountService, OwnerBankAccountService>();
         services.AddScoped<IWalletService, WalletService>();
         
-        services.AddScoped<IGoogleAuthService, GoogleAuthService>();
-
         return services;
     }
 }
