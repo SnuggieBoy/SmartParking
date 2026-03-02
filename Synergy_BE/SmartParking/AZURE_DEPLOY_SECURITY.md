@@ -26,12 +26,15 @@ Vào **SmartParkingExe** > **Configuration** > **Application settings** và **Co
 | `JwtSettings__SecretKey` | Chuỗi bí mật ≥ 32 ký tự (dùng cho JWT) |
 | `ASPNETCORE_ENVIRONMENT` | `Production` |
 
-### 3. Application Settings (tùy chọn – thanh toán)
+### 3. Application Settings – VNPay (sandbox mới)
+
+**Lưu ý:** Azure dùng **2 dấu gạch dưới** `__` (không phải `_`). Nếu đã tạo `VnPay_TmnCode` thì xóa và tạo lại thành `VnPay__TmnCode`.
 
 | Name | Value |
 |------|-------|
-| `VnPay__TmnCode` | Mã TMN từ VNPay |
-| `VnPay__HashSecret` | Hash secret từ VNPay |
+| `VnPay__TmnCode` | `0Q5Y0WQ7` |
+| `VnPay__HashSecret` | `T7NHMKVRL4N9FEHDMUU1I52ZC9NBZQIM` |
+| `VnPay__PaymentUrl` | `https://sandbox.vnpayment.vn/paymentv2/vpcpay.html` |
 | `VnPay__ReturnUrl` | `https://smartparkingexe.azurewebsites.net/api/payments/vnpay-callback` |
 | `SePay__ApiKey` | API key từ SePay |
 | `SePay__WebhookSecret` | Webhook secret từ SePay |

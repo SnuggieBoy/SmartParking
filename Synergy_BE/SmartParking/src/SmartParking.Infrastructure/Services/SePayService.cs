@@ -104,8 +104,7 @@ public sealed class SePayService : ISePayService
 
         await _paymentRepository.CreateAsync(payment, ct);
 
-        // Generate QR code (mock for now - in production, call SePay API)
-        var qrCode = GenerateQrCode(orderId, request.Amount, transferContent);
+        var qrCodeUrl = BuildSePayVietQrUrl(request.Amount, transferContent);
 
         _logger.LogInformation(
             "SePay payment created. OrderId: {OrderId}, BookingId: {BookingId}, Amount: {Amount}",
@@ -113,7 +112,8 @@ public sealed class SePayService : ISePayService
 
         return new SePayPaymentResponseDto(
             OrderId: orderId,
-            QrCodeBase64: qrCode,
+            QrCodeBase64: null,
+            QrCodeUrl: qrCodeUrl,
             BankCode: _settings.Bank.Code,
             BankAccount: _settings.Bank.AccountNumber,
             AccountName: _settings.Bank.AccountName,
@@ -168,7 +168,7 @@ public sealed class SePayService : ISePayService
 
         await _paymentRepository.CreateAsync(payment, ct);
 
-        var qrCode = GenerateQrCode(orderId, upgradeRequest.FeeAmount, transferContent);
+        var qrCodeUrl = BuildSePayVietQrUrl(upgradeRequest.FeeAmount, transferContent);
 
         _logger.LogInformation(
             "SePay subscription payment created. OrderId: {OrderId}, RequestId: {RequestId}, Amount: {Amount}",
@@ -176,7 +176,8 @@ public sealed class SePayService : ISePayService
 
         return new SePayPaymentResponseDto(
             OrderId: orderId,
-            QrCodeBase64: qrCode,
+            QrCodeBase64: null,
+            QrCodeUrl: qrCodeUrl,
             BankCode: _settings.Bank.Code,
             BankAccount: _settings.Bank.AccountNumber,
             AccountName: _settings.Bank.AccountName,
@@ -219,7 +220,7 @@ public sealed class SePayService : ISePayService
         };
 
         await _paymentRepository.CreateAsync(payment, ct);
-        var qrCode = GenerateQrCode(orderId, request.Amount, transferContent);
+        var qrCodeUrl = BuildSePayVietQrUrl(request.Amount, transferContent);
 
         _logger.LogInformation(
             "SePay wallet top-up created. OrderId: {OrderId}, UserId: {UserId}, Amount: {Amount}",
@@ -227,7 +228,8 @@ public sealed class SePayService : ISePayService
 
         return new SePayPaymentResponseDto(
             OrderId: orderId,
-            QrCodeBase64: qrCode,
+            QrCodeBase64: null,
+            QrCodeUrl: qrCodeUrl,
             BankCode: _settings.Bank.Code,
             BankAccount: _settings.Bank.AccountNumber,
             AccountName: _settings.Bank.AccountName,
@@ -411,16 +413,43 @@ public sealed class SePayService : ISePayService
     }
 
     /// <summary>
-    /// Generates QR code for bank transfer
-    /// In production, this should call SePay API or QR generation library
+    /// Build SePay VietQR URL - chuẩn QR chuyển khoản VN, app ngân hàng quét được.
+    /// API: https://qr.sepay.vn/img?acc=...&bank=...&amount=...&des=...
+    /// Tham khảo: https://developer.sepay.vn/vi/tien-ich-khac/tao-qr-code
     /// </summary>
-    private string GenerateQrCode(string orderId, decimal amount, string transferContent)
+    private string BuildSePayVietQrUrl(decimal amount, string transferContent)
     {
-        // Mock QR code generation
-        // In production, use SePay API or library like QRCoder
-        var qrData = $"bank://{_settings.Bank.Code}/{_settings.Bank.AccountNumber}?amount={amount}&memo={Uri.EscapeDataString(transferContent)}";
-        var qrBytes = Encoding.UTF8.GetBytes(qrData);
-        return Convert.ToBase64String(qrBytes);
+        var bankName = GetSePayBankName(_settings.Bank.Code);
+        var amountInt = (int)Math.Round(amount);
+        var des = Uri.EscapeDataString(transferContent);
+        return $"https://qr.sepay.vn/img?acc={_settings.Bank.AccountNumber}&bank={bankName}&amount={amountInt}&des={des}";
+    }
+
+    /// <summary>
+    /// Map bank code (MB, VCB...) to SePay bank name (MBBank, Vietcombank...)
+    /// Danh sách: https://qr.sepay.vn/banks.json
+    /// </summary>
+    private static string GetSePayBankName(string code)
+    {
+        return code?.ToUpperInvariant() switch
+        {
+            "MB" => "MBBank",
+            "VCB" => "Vietcombank",
+            "BIDV" => "BIDV",
+            "TCB" => "Techcombank",
+            "ACB" => "ACB",
+            "VPB" => "VPBank",
+            "TPB" => "TPBank",
+            "STB" => "Sacombank",
+            "VIB" => "VIB",
+            "HDB" => "HDBank",
+            "MSB" => "MSB",
+            "OCB" => "OCB",
+            "ICB" => "VietinBank",
+            "VBA" => "Agribank",
+            "LPB" => "LienVietPostBank",
+            _ => code ?? "MBBank"
+        };
     }
 
     private void ValidateSettings()
