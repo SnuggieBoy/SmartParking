@@ -151,11 +151,13 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
         var entity = await _requestRepository.GetByIdAsync(requestId, ct)
                      ?? throw new NotFoundException("Owner upgrade request not found.");
 
+        // Cho phép duyệt: Pending, PendingApproval, PendingPayment (admin có thể duyệt sớm khi test)
         var canApprove = string.Equals(entity.Status, "Pending", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(entity.Status, "PendingApproval", StringComparison.OrdinalIgnoreCase);
+                         string.Equals(entity.Status, "PendingApproval", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(entity.Status, "PendingPayment", StringComparison.OrdinalIgnoreCase);
         if (!canApprove)
         {
-            throw new BadRequestException("Only pending or pending approval requests can be approved.");
+            throw new BadRequestException("Chỉ có thể duyệt yêu cầu đang chờ duyệt hoặc chờ thanh toán.");
         }
 
         // Promote user to Owner role
@@ -211,10 +213,11 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
                      ?? throw new NotFoundException("Owner upgrade request not found.");
 
         var canReject = string.Equals(entity.Status, "Pending", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(entity.Status, "PendingApproval", StringComparison.OrdinalIgnoreCase);
+                        string.Equals(entity.Status, "PendingApproval", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(entity.Status, "PendingPayment", StringComparison.OrdinalIgnoreCase);
         if (!canReject)
         {
-            throw new BadRequestException("Only pending or pending approval requests can be rejected.");
+            throw new BadRequestException("Chỉ có thể từ chối yêu cầu đang chờ duyệt hoặc chờ thanh toán.");
         }
 
         entity.Status = "Rejected";
