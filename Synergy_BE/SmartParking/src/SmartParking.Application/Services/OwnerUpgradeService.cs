@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using SmartParking.Application.Common.Exceptions;
 using SmartParking.Application.Common.Models;
 using SmartParking.Application.Common.Settings;
+using SmartParking.Application.DTOs.Notification;
 using SmartParking.Application.DTOs.Owner;
 using SmartParking.Application.DTOs.ParkingLot;
 using SmartParking.Application.Interfaces.Repositories;
@@ -20,6 +21,7 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
     private readonly IUserRepository _userRepository;
     private readonly IRoleRepository _roleRepository;
     private readonly IParkingLotService _parkingLotService;
+    private readonly INotificationService _notificationService;
     private readonly OwnerSubscriptionSettings _settings;
 
     public OwnerUpgradeService(
@@ -27,12 +29,14 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
         IUserRepository userRepository,
         IRoleRepository roleRepository,
         IParkingLotService parkingLotService,
+        INotificationService notificationService,
         IOptions<OwnerSubscriptionSettings> settings)
     {
         _requestRepository = requestRepository;
         _userRepository = userRepository;
         _roleRepository = roleRepository;
         _parkingLotService = parkingLotService;
+        _notificationService = notificationService;
         _settings = settings.Value;
     }
 
@@ -208,6 +212,19 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
         entity.ProcessedBy = adminId;
 
         await _requestRepository.UpdateAsync(entity, ct);
+
+        // Gửi thông báo cho user biết yêu cầu đã bị từ chối kèm lý do
+        var reasonText = string.IsNullOrWhiteSpace(entity.RejectReason)
+            ? "Không có lý do cụ thể."
+            : entity.RejectReason;
+        await _notificationService.SendNotificationAsync(
+            new SendNotificationDto(
+                UserId: entity.UserId,
+                Title: "Yêu cầu đăng ký làm chủ bãi xe đã bị từ chối",
+                Message: $"Yêu cầu đăng ký làm chủ bãi xe của bạn đã bị từ chối. Lý do: {reasonText}",
+                Type: "Error"),
+            adminId,
+            ct);
 
         return MapToResponse(entity);
     }
