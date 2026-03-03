@@ -45,7 +45,16 @@ public sealed class OwnerUpgradeRequestRepository : IOwnerUpgradeRequestReposito
 
         if (!string.IsNullOrWhiteSpace(status))
         {
-            query = query.Where(r => r.Status == status);
+            // "Chờ duyệt" tab: hiển thị Pending, PendingApproval, PendingPayment (admin thấy tất cả đang chờ)
+            if (string.Equals(status, "PendingApproval", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(r =>
+                    r.Status == "PendingApproval" || r.Status == "Pending" || r.Status == "PendingPayment");
+            }
+            else
+            {
+                query = query.Where(r => r.Status == status);
+            }
         }
 
         var totalCount = await query.CountAsync(ct);
