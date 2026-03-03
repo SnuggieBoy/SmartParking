@@ -105,6 +105,8 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
             ParkingLotAddress = request.ParkingLotAddress.Trim(),
             Latitude = request.Latitude,
             Longitude = request.Longitude,
+            ImageUrl = string.IsNullOrWhiteSpace(request.ImageUrl) ? null : request.ImageUrl.Trim(),
+            Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
             PlanType = planType,
             FeeAmount = fee,
             Status = status,
@@ -166,14 +168,15 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
         user.RoleId = ownerRole.RoleId;
         await _userRepository.UpdateAsync(user, ct);
 
-        // Create ParkingLot from the registration data (name, address, lat/lng) so users can find it on the map
+        // Create ParkingLot from the registration data (name, address, lat/lng, image)
         var createLotDto = new CreateParkingLotDto(
             Name: entity.ParkingLotName,
             Address: entity.ParkingLotAddress,
             TotalCapacity: 10,      // Default, owner can update later
             PricePerHour: 10000m,   // Default 10k VND/hour, owner can update later
             Latitude: entity.Latitude,
-            Longitude: entity.Longitude);
+            Longitude: entity.Longitude,
+            ImageUrl: entity.ImageUrl);
         _ = await _parkingLotService.CreateAsync(createLotDto, entity.UserId, isAdmin: true, ct);
 
         entity.Status = "Approved";

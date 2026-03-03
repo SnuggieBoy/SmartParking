@@ -52,7 +52,9 @@ public sealed class OwnersController : BaseApiController
             Latitude: model.Latitude,
             Longitude: model.Longitude,
             PlanType: model.PlanType,
-            PaymentTransactionId: model.PaymentTransactionId);
+            PaymentTransactionId: model.PaymentTransactionId,
+            ImageUrl: model.ImageUrl,
+            Description: model.Description);
 
         var result = await _ownerUpgradeService.CreateRequestAsync(userId, dto, ct);
 

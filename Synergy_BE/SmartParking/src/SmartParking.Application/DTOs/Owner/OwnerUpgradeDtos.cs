@@ -20,7 +20,9 @@ public sealed record CreateOwnerUpgradeRequestDto(
     decimal? Latitude,
     decimal? Longitude,
     string PlanType,
-    Guid? PaymentTransactionId);
+    Guid? PaymentTransactionId,
+    string? ImageUrl = null,
+    string? Description = null);
 
 /// <summary>
 /// Lightweight filter for admin listing of owner upgrade requests.

@@ -497,6 +497,8 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
                 .HasPrecision(18, 10);
             entity.Property(e => e.Longitude)
                 .HasPrecision(18, 10);
+            entity.Property(e => e.ImageUrl).HasMaxLength(500);
+            entity.Property(e => e.Description).HasMaxLength(1000);
             entity.Property(e => e.Status).HasMaxLength(50);
             entity.Property(e => e.RejectReason).HasMaxLength(500);
 

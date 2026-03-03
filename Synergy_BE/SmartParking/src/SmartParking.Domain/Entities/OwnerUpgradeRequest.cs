@@ -25,6 +25,12 @@ public partial class OwnerUpgradeRequest
 
     public decimal? Longitude { get; set; }
 
+    /// <summary>Optional image URL (from Cloudinary).</summary>
+    public string? ImageUrl { get; set; }
+
+    /// <summary>Optional description of the parking lot.</summary>
+    public string? Description { get; set; }
+
     public string PlanType { get; set; } = null!;
 
     public decimal FeeAmount { get; set; }

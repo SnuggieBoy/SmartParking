@@ -11,5 +11,9 @@ public sealed class CreateOwnerUpgradeRequestModel
     public decimal? Longitude { get; set; }
     public string PlanType { get; set; } = "Monthly"; // default
     public Guid? PaymentTransactionId { get; set; }
+    /// <summary>Optional image URL (from Cloudinary upload).</summary>
+    public string? ImageUrl { get; set; }
+    /// <summary>Optional description of the parking lot.</summary>
+    public string? Description { get; set; }
 }
 
