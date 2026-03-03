@@ -35,6 +35,23 @@ public sealed class PaymentController : BaseApiController
     }
 
     /// <summary>
+    /// Get payment status by orderId (SePay txn ref). For polling after bank transfer.
+    /// Returns null if not found or user doesn't own the payment.
+    /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.UserOrOwnerOrAdmin)]
+    [HttpGet("status/{orderId}")]
+    [ProducesResponseType(typeof(ApiResponse<PaymentStatusByOrderDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<PaymentStatusByOrderDto>>> GetPaymentStatusByOrderId(string orderId, CancellationToken ct)
+    {
+        var userId = GetUserIdFromToken();
+        var dto = await _paymentService.GetPaymentStatusByOrderIdAsync(orderId, userId, ct);
+        if (dto == null)
+            return NotFound(ApiResponse<PaymentStatusByOrderDto>.FailureResponse("Payment not found"));
+        return Ok(ApiResponse<PaymentStatusByOrderDto>.SuccessResponse(dto, Messages.Payment.PaymentStatusRetrieved));
+    }
+
+    /// <summary>
     /// SECURITY: Only booking owner OR Admin can query payment status.
     /// Ownership validated in service layer.
     /// </summary>

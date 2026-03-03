@@ -20,6 +20,27 @@ public sealed class PaymentService : IPaymentService
         _bookingRepository = bookingRepository;
     }
 
+    public async Task<PaymentStatusByOrderDto?> GetPaymentStatusByOrderIdAsync(string orderId, Guid userId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(orderId))
+            return null;
+
+        var payment = await _paymentRepository.GetByTxnRefAsync(orderId.Trim(), ct);
+        if (payment == null)
+            return null;
+
+        if (payment.UserId != userId)
+            return null;
+
+        return new PaymentStatusByOrderDto(
+            orderId,
+            payment.PaymentStatus ?? nameof(PaymentStatus.Pending),
+            payment.Amount,
+            payment.PaymentType ?? "Unknown",
+            payment.PaymentStatus == nameof(PaymentStatus.Success) ? payment.UpdatedAt : null
+        );
+    }
+
     public async Task<PaymentStatusDto> GetPaymentStatusByBookingAsync(
         Guid bookingId,
         Guid userId,
