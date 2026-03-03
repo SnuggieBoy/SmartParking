@@ -6,9 +6,9 @@ namespace SmartParking.Application.Common.Settings;
 /// </summary>
 public sealed class OwnerSubscriptionSettings
 {
-    public decimal MonthlyFee { get; init; } = 199_000m;
+    public decimal MonthlyFee { get; init; } = 100_000m;
 
-    public decimal YearlyFee { get; init; } = 1_990_000m;
+    public decimal YearlyFee { get; init; } = 1_000_000m;
 
     public int MonthlyDurationDays { get; init; } = 30;
 

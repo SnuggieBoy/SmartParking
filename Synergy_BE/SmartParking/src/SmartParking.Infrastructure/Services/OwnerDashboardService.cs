@@ -217,10 +217,13 @@ public sealed class OwnerDashboardService : IOwnerDashboardService
         var daysRemaining = Math.Max(0, (expiryDate - DateTime.UtcNow).Days);
         var isActive = DateTime.UtcNow < expiryDate;
 
+        var planPrice = request.PlanType == "Yearly"
+            ? _subscriptionSettings.YearlyFee
+            : _subscriptionSettings.MonthlyFee;
         return new OwnerSubscriptionDto(
             IsActive: isActive,
             PlanType: request.PlanType,
-            PlanPrice: request.FeeAmount,
+            PlanPrice: planPrice,
             StartDate: startDate,
             ExpiryDate: expiryDate,
             DaysRemaining: daysRemaining,
