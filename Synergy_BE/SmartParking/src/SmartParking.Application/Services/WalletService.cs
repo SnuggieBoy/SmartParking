@@ -1,5 +1,6 @@
 using SmartParking.Application.Common.Exceptions;
 using SmartParking.Application.Common.Models;
+using SmartParking.Application.DTOs.Notification;
 using SmartParking.Application.Interfaces.Repositories;
 using SmartParking.Application.Interfaces.Services;
 using SmartParking.Domain.Constants;
@@ -14,17 +15,20 @@ public sealed class WalletService : IWalletService
     private readonly IPaymentRepository _paymentRepository;
     private readonly IBookingRepository _bookingRepository;
     private readonly IOwnerUpgradeRequestRepository _ownerUpgradeRequestRepository;
+    private readonly INotificationService _notificationService;
 
     public WalletService(
         IUserWalletRepository walletRepository,
         IPaymentRepository paymentRepository,
         IBookingRepository bookingRepository,
-        IOwnerUpgradeRequestRepository ownerUpgradeRequestRepository)
+        IOwnerUpgradeRequestRepository ownerUpgradeRequestRepository,
+        INotificationService notificationService)
     {
         _walletRepository = walletRepository;
         _paymentRepository = paymentRepository;
         _bookingRepository = bookingRepository;
         _ownerUpgradeRequestRepository = ownerUpgradeRequestRepository;
+        _notificationService = notificationService;
     }
 
     public async Task<decimal> GetBalanceAsync(Guid userId, CancellationToken ct = default)
@@ -56,6 +60,11 @@ public sealed class WalletService : IWalletService
         await _walletRepository.UpdateAsync(wallet, ct);
         await _walletRepository.AddTransactionAsync(transaction, ct);
 
+        // Thông báo nạp ví thành công
+        await _notificationService.SendNotificationAsync(
+            new SendNotificationDto(UserId: userId, Title: "Nạp ví thành công", Message: $"Bạn đã nạp {amount:N0}đ vào ví. Số dư hiện tại: {wallet.Balance:N0}đ.", Type: "Success"),
+            null, ct);
+
         return new { balance = wallet.Balance, transaction = new { id = transaction.WalletTransactionId, amount, balanceAfter = wallet.Balance, type = "TopUp", createdAt = transaction.CreatedAt } };
     }
 
@@ -79,6 +88,11 @@ public sealed class WalletService : IWalletService
 
         await _walletRepository.UpdateAsync(wallet, ct);
         await _walletRepository.AddTransactionAsync(transaction, ct);
+
+        // Thông báo nạp ví thành công (qua SePay/ngân hàng)
+        await _notificationService.SendNotificationAsync(
+            new SendNotificationDto(UserId: userId, Title: "Nạp ví thành công", Message: $"Bạn đã nạp {amount:N0}đ vào ví qua chuyển khoản. Số dư hiện tại: {wallet.Balance:N0}đ.", Type: "Success"),
+            null, ct);
     }
 
     public async Task<PagedResult<WalletTransactionDto>> GetTransactionsAsync(Guid userId, int page, int pageSize, CancellationToken ct = default)
@@ -153,6 +167,10 @@ public sealed class WalletService : IWalletService
             await TransferBookingToOwnerAsync(bookingId, amount, ownerId, ct);
         }
 
+        // Thông báo thanh toán thành công
+        await _notificationService.CreatePaymentNotificationAsync(
+            userId, "Thanh toán thành công", $"Bạn đã thanh toán {amount:N0}đ cho đặt chỗ tại bãi xe {booking.ParkingLot?.Name ?? "bãi xe"}.", payment.PaymentId, ct);
+
         return new PayWithWalletResultDto(true, "Thanh toán thành công", wallet.Balance);
     }
 
@@ -204,6 +222,10 @@ public sealed class WalletService : IWalletService
         await _walletRepository.UpdateAsync(wallet, ct);
         await _walletRepository.AddTransactionAsync(walletTrans, ct);
         await _paymentRepository.CreateAsync(payment, ct);
+
+        // Thông báo thanh toán gia hạn thành công
+        await _notificationService.CreatePaymentNotificationAsync(
+            userId, "Thanh toán gia hạn thành công", $"Bạn đã thanh toán {extensionAmount:N0}đ cho gia hạn đặt chỗ.", payment.PaymentId, ct);
 
         return new PayWithWalletResultDto(true, "Thanh toán gia hạn thành công", wallet.Balance);
     }
@@ -259,6 +281,11 @@ public sealed class WalletService : IWalletService
         await _walletRepository.AddTransactionAsync(walletTrans, ct);
         await _paymentRepository.CreateAsync(payment, ct);
         await _ownerUpgradeRequestRepository.UpdatePaymentAsync(ownerUpgradeRequestId, payment.PaymentId, ct);
+
+        // Thông báo thanh toán phí đăng ký thành công
+        await _notificationService.SendNotificationAsync(
+            new SendNotificationDto(UserId: userId, Title: "Thanh toán phí đăng ký thành công", Message: $"Bạn đã thanh toán {amount:N0}đ cho phí đăng ký làm chủ bãi xe. Yêu cầu đang chờ Admin duyệt.", Type: "Success"),
+            null, ct);
 
         return new PayWithWalletResultDto(true, "Thanh toán phí đăng ký thành công", wallet.Balance);
     }

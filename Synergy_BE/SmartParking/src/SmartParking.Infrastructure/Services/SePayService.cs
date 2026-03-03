@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using SmartParking.Application.Common.Exceptions;
+using SmartParking.Application.DTOs.Notification;
 using SmartParking.Application.DTOs.Payment;
 using SmartParking.Application.Interfaces.Repositories;
 using SmartParking.Application.Interfaces.Services;
@@ -18,6 +19,7 @@ public sealed class SePayService : ISePayService
     private readonly IBookingRepository _bookingRepository;
     private readonly IOwnerUpgradeRequestRepository _ownerUpgradeRequestRepository;
     private readonly IWalletService _walletService;
+    private readonly INotificationService _notificationService;
     private readonly ILogger<SePayService> _logger;
     private readonly SePaySettings _settings;
 
@@ -26,6 +28,7 @@ public sealed class SePayService : ISePayService
         IBookingRepository bookingRepository,
         IOwnerUpgradeRequestRepository ownerUpgradeRequestRepository,
         IWalletService walletService,
+        INotificationService notificationService,
         IConfiguration configuration,
         ILogger<SePayService> logger)
     {
@@ -33,6 +36,7 @@ public sealed class SePayService : ISePayService
         _bookingRepository = bookingRepository;
         _ownerUpgradeRequestRepository = ownerUpgradeRequestRepository;
         _walletService = walletService;
+        _notificationService = notificationService;
         _logger = logger;
         _settings = configuration.GetSection("SePay").Get<SePaySettings>() 
             ?? throw new InvalidOperationException("SePay configuration is missing");
@@ -350,6 +354,14 @@ public sealed class SePayService : ISePayService
                 _logger.LogInformation(
                     "Booking confirmed via SePay. BookingId: {BookingId}, OrderId: {OrderId}",
                     booking.BookingId, orderId);
+
+                // Thông báo thanh toán thành công cho user
+                await _notificationService.CreatePaymentNotificationAsync(
+                    payment.UserId,
+                    "Thanh toán thành công",
+                    $"Bạn đã thanh toán {payment.Amount:N0}đ cho đặt chỗ tại bãi xe {booking.ParkingLot?.Name ?? "bãi xe"} qua SePay.",
+                    payment.PaymentId,
+                    ct);
             }
         }
         else if (payment.PaymentType == "Subscription" && payment.OwnerUpgradeRequestId.HasValue)
@@ -364,6 +376,15 @@ public sealed class SePayService : ISePayService
                 _logger.LogInformation(
                     "Owner upgrade request moved to PendingApproval via SePay. RequestId: {RequestId}, OrderId: {OrderId}",
                     upgradeRequest.RequestId, orderId);
+
+                // Thông báo thanh toán phí đăng ký thành công
+                await _notificationService.SendNotificationAsync(
+                    new SendNotificationDto(
+                        UserId: upgradeRequest.UserId,
+                        Title: "Thanh toán phí đăng ký thành công",
+                        Message: $"Bạn đã thanh toán {payment.Amount:N0}đ cho phí đăng ký làm chủ bãi xe qua SePay. Yêu cầu đang chờ Admin duyệt.",
+                        Type: "Success"),
+                    null, ct);
             }
         }
         else if (payment.PaymentType == "WalletTopUp")

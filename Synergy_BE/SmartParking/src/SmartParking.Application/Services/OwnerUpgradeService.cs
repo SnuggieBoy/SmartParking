@@ -188,6 +188,16 @@ public sealed class OwnerUpgradeService : IOwnerUpgradeService
 
         await _requestRepository.UpdateAsync(entity, ct);
 
+        // Gửi thông báo cho user biết yêu cầu đã được duyệt
+        await _notificationService.SendNotificationAsync(
+            new SendNotificationDto(
+                UserId: entity.UserId,
+                Title: "Yêu cầu đăng ký làm chủ bãi xe đã được duyệt",
+                Message: "Chúc mừng! Yêu cầu đăng ký làm chủ bãi xe của bạn đã được phê duyệt. Bạn có thể đăng nhập và quản lý bãi xe của mình.",
+                Type: "Success"),
+            adminId,
+            ct);
+
         return MapToResponse(entity);
     }
 

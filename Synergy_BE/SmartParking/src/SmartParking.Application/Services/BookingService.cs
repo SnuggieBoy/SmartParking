@@ -19,6 +19,7 @@ public sealed class BookingService : IBookingService
     private readonly IPaymentRepository _paymentRepository;
     private readonly IExtensionRequestRepository _extensionRequestRepository;
     private readonly IWalletService _walletService;
+    private readonly INotificationService _notificationService;
 
     public BookingService(
         IBookingRepository bookingRepository,
@@ -26,7 +27,8 @@ public sealed class BookingService : IBookingService
         IVehicleRepository vehicleRepository,
         IPaymentRepository paymentRepository,
         IExtensionRequestRepository extensionRequestRepository,
-        IWalletService walletService)
+        IWalletService walletService,
+        INotificationService notificationService)
     {
         _bookingRepository = bookingRepository;
         _parkingLotRepository = parkingLotRepository;
@@ -34,6 +36,7 @@ public sealed class BookingService : IBookingService
         _paymentRepository = paymentRepository;
         _extensionRequestRepository = extensionRequestRepository;
         _walletService = walletService;
+        _notificationService = notificationService;
     }
 
     public async Task<BookingDto> GetByIdAsync(Guid bookingId, Guid userId, bool isAdmin, bool isOwner = false, CancellationToken ct = default)
@@ -130,6 +133,15 @@ public sealed class BookingService : IBookingService
 
         // Reload with navigation properties
         created = await _bookingRepository.GetByIdAsync(created.BookingId, includeDeleted: false, ct);
+
+        // Thông báo đặt chỗ thành công
+        await _notificationService.CreateBookingNotificationAsync(
+            userId,
+            "Đặt chỗ thành công",
+            $"Bạn đã đặt chỗ tại bãi xe {parkingLot.Name}. Tổng tiền: {totalAmount:N0}đ. Vui lòng thanh toán để hoàn tất.",
+            created!.BookingId,
+            ct);
+
         return MapToDto(created!);
     }
 
@@ -200,6 +212,14 @@ public sealed class BookingService : IBookingService
 
         // Update occupancy
         await _parkingLotRepository.UpdateOccupancyAsync(booking.ParkingLotId, -1, ct);
+
+        // Thông báo hủy booking
+        await _notificationService.CreateBookingNotificationAsync(
+            booking.UserId,
+            "Booking đã bị hủy",
+            "Đặt chỗ của bạn đã được hủy.",
+            bookingId,
+            ct);
     }
 
     public async Task<BookingCheckInResponseDto> BookingCheckInAsync(
@@ -776,6 +796,14 @@ public sealed class BookingService : IBookingService
             await _walletService.TransferBookingToOwnerAsync(bookingId, totalPaid, parkingLotOwnerId, ct);
         }
 
+        // Thông báo booking đã được duyệt
+        await _notificationService.CreateBookingNotificationAsync(
+            booking.UserId,
+            "Booking đã được duyệt",
+            $"Đặt chỗ tại bãi xe {booking.ParkingLot?.Name ?? "bãi xe"} đã được chủ bãi duyệt. Bạn có thể Check-in khi đến.",
+            bookingId,
+            ct);
+
         // Reload to ensure updated data
         return MapToDto(booking);
     }
@@ -810,5 +838,13 @@ public sealed class BookingService : IBookingService
         // CheckOut/Cancel updates occupancy -1.
         // So yes, we MUST decrease occupancy.
         await _parkingLotRepository.UpdateOccupancyAsync(booking.ParkingLotId, -1, ct);
+
+        // Thông báo booking bị từ chối
+        await _notificationService.CreateBookingNotificationAsync(
+            booking.UserId,
+            "Booking đã bị từ chối",
+            $"Đặt chỗ tại bãi xe {booking.ParkingLot?.Name ?? "bãi xe"} đã bị chủ bãi từ chối.{(string.IsNullOrWhiteSpace(reason) ? "" : $" Lý do: {reason}")}",
+            bookingId,
+            ct);
     }
 }
