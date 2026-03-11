@@ -10,6 +10,10 @@ public interface IParkingLotRepository
         string? searchTerm, 
         bool? isActive, 
         string? status,
+        int? provinceCode,
+        string? province,
+        int? wardCode,
+        string? ward,
         int page, 
         int pageSize, 
         CancellationToken ct = default);

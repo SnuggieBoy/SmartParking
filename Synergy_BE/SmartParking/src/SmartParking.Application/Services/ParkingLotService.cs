@@ -12,15 +12,18 @@ namespace SmartParking.Application.Services;
 public sealed class ParkingLotService : IParkingLotService
 {
     private readonly IParkingLotRepository _parkingLotRepository;
+    private readonly IParkingLocationRepository _parkingLocationRepository;
     private readonly IUserRepository _userRepository;
     private readonly IRoleRepository _roleRepository;
 
     public ParkingLotService(
         IParkingLotRepository parkingLotRepository,
+        IParkingLocationRepository parkingLocationRepository,
         IUserRepository userRepository,
         IRoleRepository roleRepository)
     {
         _parkingLotRepository = parkingLotRepository;
+        _parkingLocationRepository = parkingLocationRepository;
         _userRepository = userRepository;
         _roleRepository = roleRepository;
     }
@@ -42,6 +45,10 @@ public sealed class ParkingLotService : IParkingLotService
             filter.SearchTerm,
             filter.IsActive,
             filter.Status,
+            filter.ProvinceCode,
+            filter.Province,
+            filter.WardCode,
+            filter.Ward,
             filter.Page,
             filter.PageSize,
             ct);
@@ -106,6 +113,48 @@ public sealed class ParkingLotService : IParkingLotService
 
         var created = await _parkingLotRepository.CreateAsync(parkingLot, ct);
         created.Owner = owner; // Set for DTO mapping
+
+        // Upsert ParkingLocation for structured filtering (Province/Ward/Street/Area/FullAddress)
+        // This does not replace ParkingLot.Latitude/Longitude; it's an additional table used by nearby search and filters.
+        var fullAddress = string.IsNullOrWhiteSpace(request.Address) ? null : request.Address.Trim();
+        var location = await _parkingLocationRepository.GetByParkingLotIdAsync(created.ParkingLotId, includeDeleted: false, ct);
+        if (location == null)
+        {
+            location = new ParkingLocation
+            {
+                LocationId = Guid.NewGuid(),
+                ParkingLotId = created.ParkingLotId,
+                Latitude = created.Latitude ?? 0,
+                Longitude = created.Longitude ?? 0,
+            ProvinceCode = request.ProvinceCode,
+                Province = string.IsNullOrWhiteSpace(request.Province) ? null : request.Province.Trim(),
+            WardCode = request.WardCode,
+                Ward = string.IsNullOrWhiteSpace(request.Ward) ? null : request.Ward.Trim(),
+                Street = string.IsNullOrWhiteSpace(request.Street) ? null : request.Street.Trim(),
+                Area = string.IsNullOrWhiteSpace(request.Area) ? null : request.Area.Trim(),
+                FullAddress = fullAddress,
+                CreatedAt = now,
+                CreatedBy = ownerId,
+                IsDeleted = false
+            };
+            await _parkingLocationRepository.CreateAsync(location, ct);
+        }
+        else
+        {
+            location.Latitude = created.Latitude ?? location.Latitude;
+            location.Longitude = created.Longitude ?? location.Longitude;
+            location.ProvinceCode = request.ProvinceCode ?? location.ProvinceCode;
+            location.Province = string.IsNullOrWhiteSpace(request.Province) ? location.Province : request.Province.Trim();
+            location.WardCode = request.WardCode ?? location.WardCode;
+            location.Ward = string.IsNullOrWhiteSpace(request.Ward) ? location.Ward : request.Ward.Trim();
+            location.Street = string.IsNullOrWhiteSpace(request.Street) ? location.Street : request.Street.Trim();
+            location.Area = string.IsNullOrWhiteSpace(request.Area) ? location.Area : request.Area.Trim();
+            location.FullAddress = fullAddress ?? location.FullAddress;
+            location.UpdatedAt = now;
+            location.UpdatedBy = ownerId;
+            await _parkingLocationRepository.UpdateAsync(location, ct);
+        }
+
         return MapToResponseDto(created);
     }
 
@@ -141,10 +190,52 @@ public sealed class ParkingLotService : IParkingLotService
         parkingLot.Longitude = request.Longitude;
         parkingLot.ImageUrl = request.ImageUrl ?? parkingLot.ImageUrl;
         parkingLot.IsActive = request.IsActive;
-        parkingLot.UpdatedAt = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+        parkingLot.UpdatedAt = now;
         parkingLot.UpdatedBy = userId;
 
         await _parkingLotRepository.UpdateAsync(parkingLot, ct);
+
+        // Upsert ParkingLocation structured fields for filters/search
+        var location = await _parkingLocationRepository.GetByParkingLotIdAsync(parkingLot.ParkingLotId, includeDeleted: false, ct);
+        var fullAddress = string.IsNullOrWhiteSpace(request.Address) ? null : request.Address.Trim();
+        if (location == null)
+        {
+            location = new ParkingLocation
+            {
+                LocationId = Guid.NewGuid(),
+                ParkingLotId = parkingLot.ParkingLotId,
+                Latitude = parkingLot.Latitude ?? 0,
+                Longitude = parkingLot.Longitude ?? 0,
+            ProvinceCode = request.ProvinceCode,
+                Province = string.IsNullOrWhiteSpace(request.Province) ? null : request.Province.Trim(),
+            WardCode = request.WardCode,
+                Ward = string.IsNullOrWhiteSpace(request.Ward) ? null : request.Ward.Trim(),
+                Street = string.IsNullOrWhiteSpace(request.Street) ? null : request.Street.Trim(),
+                Area = string.IsNullOrWhiteSpace(request.Area) ? null : request.Area.Trim(),
+                FullAddress = fullAddress,
+                CreatedAt = now,
+                CreatedBy = userId,
+                IsDeleted = false
+            };
+            await _parkingLocationRepository.CreateAsync(location, ct);
+        }
+        else
+        {
+            location.Latitude = parkingLot.Latitude ?? location.Latitude;
+            location.Longitude = parkingLot.Longitude ?? location.Longitude;
+            location.ProvinceCode = request.ProvinceCode ?? location.ProvinceCode;
+            location.Province = string.IsNullOrWhiteSpace(request.Province) ? location.Province : request.Province.Trim();
+            location.WardCode = request.WardCode ?? location.WardCode;
+            location.Ward = string.IsNullOrWhiteSpace(request.Ward) ? location.Ward : request.Ward.Trim();
+            location.Street = string.IsNullOrWhiteSpace(request.Street) ? location.Street : request.Street.Trim();
+            location.Area = string.IsNullOrWhiteSpace(request.Area) ? location.Area : request.Area.Trim();
+            location.FullAddress = fullAddress ?? location.FullAddress;
+            location.UpdatedAt = now;
+            location.UpdatedBy = userId;
+            await _parkingLocationRepository.UpdateAsync(location, ct);
+        }
+
         return MapToResponseDto(parkingLot);
     }
 

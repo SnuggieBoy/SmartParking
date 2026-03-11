@@ -18,9 +18,20 @@ public partial class ParkingLocation
     public decimal Longitude { get; set; }
 
     // Address components
+    /// <summary>
+    /// Vietnam Province/City code (from provinces.open-api.vn), optional.
+    /// </summary>
+    public int? ProvinceCode { get; set; }
+
     public string? Province { get; set; }
 
+    // Legacy (kept for backward compatibility)
     public string? District { get; set; }
+
+    /// <summary>
+    /// Vietnam Ward/Commune code (from provinces.open-api.vn), optional.
+    /// </summary>
+    public int? WardCode { get; set; }
 
     public string? Ward { get; set; }
 

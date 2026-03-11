@@ -433,9 +433,12 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
             entity.Property(e => e.Longitude)
                 .IsRequired()
                 .HasColumnType("decimal(10, 7)");
+            entity.Property(e => e.ProvinceCode);
             entity.Property(e => e.Province).HasMaxLength(100);
-            entity.Property(e => e.District).HasMaxLength(100);
+            entity.Property(e => e.WardCode);
             entity.Property(e => e.Ward).HasMaxLength(100);
+            // Legacy column (if exists) - keep mapping for backward compatibility
+            entity.Property(e => e.District).HasMaxLength(100);
             entity.Property(e => e.Street).HasMaxLength(255);
             entity.Property(e => e.Area).HasMaxLength(255);
             entity.Property(e => e.FullAddress).HasMaxLength(500);

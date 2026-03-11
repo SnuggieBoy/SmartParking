@@ -35,12 +35,16 @@ public sealed class AdminParkingLotsController : BaseApiController
         [FromQuery] string? search,
         [FromQuery] bool? isActive,
         [FromQuery] string? status,
+        [FromQuery] int? provinceCode,
+        [FromQuery] string? province,
+        [FromQuery] int? wardCode,
+        [FromQuery] string? ward,
         [FromQuery] Guid? ownerId,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default)
     {
-        var filter = new ParkingLotFilterDto(search, isActive, status, ownerId, page, pageSize);
+        var filter = new ParkingLotFilterDto(search, isActive, status, provinceCode, province, wardCode, ward, ownerId, page, pageSize);
         var result = await _parkingLotService.GetAllAsync(filter, ct);
         return Ok(ApiResponse<PagedResult<ParkingLotResponseDto>>.SuccessResponse(result, "Parking lots retrieved successfully"));
     }
@@ -59,6 +63,10 @@ public sealed class AdminParkingLotsController : BaseApiController
             SearchTerm: null,
             IsActive: null,
             Status: ParkingLotStatus.PendingApproval,
+            ProvinceCode: null,
+            Province: null,
+            WardCode: null,
+            Ward: null,
             OwnerId: null,
             Page: page,
             PageSize: pageSize);

@@ -34,6 +34,10 @@ public sealed class ParkingLotRepository : IParkingLotRepository
         string? searchTerm,
         bool? isActive,
         string? status,
+        int? provinceCode,
+        string? province,
+        int? wardCode,
+        string? ward,
         int page,
         int pageSize,
         CancellationToken ct = default)
@@ -66,6 +70,39 @@ public sealed class ParkingLotRepository : IParkingLotRepository
         else if (isActive.HasValue && isActive.Value)
         {
             query = query.Where(p => p.Status == "Approved" || p.Status == "Active");
+        }
+
+        // Exact filter by admin codes (fast + reliable)
+        if (provinceCode.HasValue)
+        {
+            var pCode = provinceCode.Value;
+            query = query.Where(p =>
+                _context.ParkingLocations.Any(l => !l.IsDeleted && l.ParkingLotId == p.ParkingLotId && l.ProvinceCode == pCode));
+        }
+
+        if (wardCode.HasValue)
+        {
+            var wCode = wardCode.Value;
+            query = query.Where(p =>
+                _context.ParkingLocations.Any(l => !l.IsDeleted && l.ParkingLotId == p.ParkingLotId && l.WardCode == wCode));
+        }
+
+        // Filter by structured admin units (stored in ParkingLocations)
+        // Use ParkingLocations as source of truth; fall back to Address text matching when no location row exists.
+        if (!string.IsNullOrWhiteSpace(province))
+        {
+            var prov = province.Trim();
+            query = query.Where(p =>
+                _context.ParkingLocations.Any(l => !l.IsDeleted && l.ParkingLotId == p.ParkingLotId && l.Province == prov) ||
+                p.Address.Contains(prov));
+        }
+
+        if (!string.IsNullOrWhiteSpace(ward))
+        {
+            var w = ward.Trim();
+            query = query.Where(p =>
+                _context.ParkingLocations.Any(l => !l.IsDeleted && l.ParkingLotId == p.ParkingLotId && l.Ward == w) ||
+                p.Address.Contains(w));
         }
 
         // Get total count

@@ -51,6 +51,32 @@ public sealed record CreateParkingLotDto(
     decimal? Longitude,
 
     /// <summary>
+    /// VN admin codes (recommended for exact filtering)
+    /// </summary>
+    int? ProvinceCode = null,
+
+    /// <summary>
+    /// Optional structured location - Vietnam admin units (for filtering).
+    /// These are stored into ParkingLocations table (Province/Ward/Street/Area/FullAddress).
+    /// </summary>
+    [MaxLength(100)]
+    string? Province = null,
+
+    int? WardCode = null,
+
+    [MaxLength(100)]
+    string? Ward = null,
+
+    [MaxLength(255)]
+    string? Street = null,
+
+    /// <summary>
+    /// Optional note / area hint (e.g. "near gate A")
+    /// </summary>
+    [MaxLength(255)]
+    string? Area = null,
+
+    /// <summary>
     /// Optional main image URL (from Cloudinary upload)
     /// </summary>
     [MaxLength(500)]
@@ -83,6 +109,22 @@ public sealed record UpdateParkingLotDto(
 
     bool IsActive,
 
+    int? ProvinceCode = null,
+
+    [MaxLength(100)]
+    string? Province = null,
+
+    int? WardCode = null,
+
+    [MaxLength(100)]
+    string? Ward = null,
+
+    [MaxLength(255)]
+    string? Street = null,
+
+    [MaxLength(255)]
+    string? Area = null,
+
     /// <summary>
     /// Optional main image URL (from Cloudinary upload)
     /// </summary>
@@ -97,6 +139,10 @@ public sealed record ParkingLotFilterDto(
     string? SearchTerm,
     bool? IsActive,
     string? Status,
+    int? ProvinceCode,
+    string? Province,
+    int? WardCode,
+    string? Ward,
     Guid? OwnerId,
     int Page = 1,
     int PageSize = 10

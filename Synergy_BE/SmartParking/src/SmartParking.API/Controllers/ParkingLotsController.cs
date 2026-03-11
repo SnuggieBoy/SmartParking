@@ -56,6 +56,10 @@ public sealed class ParkingLotsController : BaseApiController
         [FromQuery] string? search,
         [FromQuery] bool? isActive,
         [FromQuery] string? status,
+        [FromQuery] int? provinceCode,
+        [FromQuery] string? province,
+        [FromQuery] int? wardCode,
+        [FromQuery] string? ward,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
         CancellationToken ct = default)
@@ -65,7 +69,7 @@ public sealed class ParkingLotsController : BaseApiController
         var effectiveIsActive = isActive; 
         var effectiveStatus = status;
 
-        var filter = new ParkingLotFilterDto(search, effectiveIsActive, effectiveStatus, null, page, pageSize);
+        var filter = new ParkingLotFilterDto(search, effectiveIsActive, effectiveStatus, provinceCode, province, wardCode, ward, null, page, pageSize);
         var result = await _parkingLotService.GetAllAsync(filter, ct);
         return Ok(ApiResponse<PagedResult<ParkingLotResponseDto>>.SuccessResponse(result, "Parking lots retrieved successfully"));
     }
