@@ -1,6 +1,7 @@
 using SmartParking.Application.Common.Exceptions;
 using SmartParking.Application.Common.Models;
 using SmartParking.Domain.Constants;
+using Microsoft.EntityFrameworkCore;
 using System.Net;
 using System.Text.Json;
 
@@ -65,6 +66,16 @@ public sealed class ExceptionHandlingMiddleware : IMiddleware
                 HttpStatusCode.Unauthorized,
                 uaEx.Message,
                 new[] { uaEx.Message }
+            ),
+            DbUpdateException dbEx => (
+                HttpStatusCode.InternalServerError,
+                "Database update failed. Please ensure the latest migrations have been applied to the database.",
+                isDevelopment
+                    ? new[] {
+                        dbEx.Message,
+                        dbEx.InnerException != null ? $"Inner Exception: {dbEx.InnerException.Message}" : ""
+                    }
+                    : Array.Empty<string>()
             ),
             // SECURITY: Unknown exceptions - sanitize in production
             _ => isDevelopment

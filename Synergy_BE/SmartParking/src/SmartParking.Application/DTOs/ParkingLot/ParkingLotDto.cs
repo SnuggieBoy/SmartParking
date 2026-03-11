@@ -23,7 +23,16 @@ public sealed record ParkingLotResponseDto(
     string? RejectReason,
     string? ImageUrl,
     DateTime CreatedAt,
-    DateTime? UpdatedAt
+    DateTime? UpdatedAt,
+    /// <summary>VN admin code for province - for edit form pre-fill and filtering</summary>
+    int? ProvinceCode = null,
+    string? Province = null,
+    int? WardCode = null,
+    string? Ward = null,
+    /// <summary>Detailed street/house number - for edit form pre-fill</summary>
+    string? Street = null,
+    /// <summary>Optional note/area - for edit form pre-fill</summary>
+    string? Area = null
 );
 
 /// <summary>
