@@ -9,31 +9,31 @@ namespace SmartParking.Infrastructure.Migrations;
 /// NOTE: This project did not previously track migrations, so we keep this migration minimal
 /// (only adds columns + index) to be safe against existing databases.
 /// </summary>
-public partial class AddProvinceWardCodesToParkingLocations : Migration
-{
-    protected override void Up(MigrationBuilder migrationBuilder)
+    public partial class AddProvinceWardCodesToParkingLocations : Migration
     {
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
         migrationBuilder.AddColumn<int>(
             name: "ProvinceCode",
-            table: "ParkingLocations",
+                table: "ParkingLocations",
             type: "int",
             nullable: true);
 
         migrationBuilder.AddColumn<int>(
             name: "WardCode",
-            table: "ParkingLocations",
+                table: "ParkingLocations",
             type: "int",
             nullable: true);
 
-        migrationBuilder.CreateIndex(
+            migrationBuilder.CreateIndex(
             name: "IX_ParkingLocations_ProvinceCode_WardCode",
-            table: "ParkingLocations",
+                table: "ParkingLocations",
             columns: new[] { "ProvinceCode", "WardCode" },
-            filter: "[IsDeleted] = 0");
+                filter: "[IsDeleted] = 0");
     }
 
-    protected override void Down(MigrationBuilder migrationBuilder)
-    {
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
         migrationBuilder.DropIndex(
             name: "IX_ParkingLocations_ProvinceCode_WardCode",
             table: "ParkingLocations");
