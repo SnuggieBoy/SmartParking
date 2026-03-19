@@ -192,7 +192,6 @@ public sealed class BookingService : IBookingService
             throw new NotFoundException(Messages.Booking.NotFound);
         }
 
-        // SECURITY: Validate ownership or Admin access
         SecurityHelper.ValidateOwnership(booking.UserId, userId, isAdmin);
 
         if (booking.Status == nameof(BookingStatus.Cancelled))
@@ -209,15 +208,19 @@ public sealed class BookingService : IBookingService
         booking.UpdatedAt = DateTime.UtcNow;
 
         await _bookingRepository.UpdateAsync(booking, ct);
-
-        // Update occupancy
         await _parkingLotRepository.UpdateOccupancyAsync(booking.ParkingLotId, -1, ct);
 
-        // Thông báo hủy booking
+        var totalPaid = await _paymentRepository.GetTotalPaidForBookingAsync(bookingId, ct);
+        if (totalPaid > 0)
+        {
+            await _walletService.RefundBookingFullAsync(
+                bookingId, booking.UserId, totalPaid, "Người dùng hủy booking", ct);
+        }
+
         await _notificationService.CreateBookingNotificationAsync(
             booking.UserId,
             "Booking đã bị hủy",
-            "Đặt chỗ của bạn đã được hủy.",
+            "Đặt chỗ của bạn đã được hủy và hoàn tiền.",
             bookingId,
             ct);
     }
@@ -816,7 +819,6 @@ public sealed class BookingService : IBookingService
             throw new NotFoundException(Messages.Booking.NotFound);
         }
 
-        // Validate Owner (Admin bypasses)
         if (!isAdmin && booking.ParkingLot?.OwnerId != ownerId)
         {
             throw new ForbiddenException("Bạn không phải chủ bãi xe của booking này.");
@@ -824,26 +826,29 @@ public sealed class BookingService : IBookingService
 
         if (booking.Status != nameof(BookingStatus.Pending) && booking.Status != nameof(BookingStatus.Confirmed))
         {
-             throw new BadRequestException("Cannot reject completed or cancelled bookings.");
+             throw new BadRequestException("Không thể từ chối booking đã hoàn thành hoặc đã hủy.");
         }
 
         booking.Status = nameof(BookingStatus.Cancelled);
         booking.UpdatedAt = DateTime.UtcNow;
-        // Note: Booking entity doesn't have RejectReason, so we just Cancel.
 
         await _bookingRepository.UpdateAsync(booking, ct);
-        
-        // Update occupancy (if it was confirmed/active, need to free up checking logic? Pending bookings reserved a slot?)
-        // CreateAsync updates occupancy +1 (Line 116).
-        // CheckOut/Cancel updates occupancy -1.
-        // So yes, we MUST decrease occupancy.
         await _parkingLotRepository.UpdateOccupancyAsync(booking.ParkingLotId, -1, ct);
 
-        // Thông báo booking bị từ chối
+        var totalPaid = await _paymentRepository.GetTotalPaidForBookingAsync(bookingId, ct);
+        if (totalPaid > 0)
+        {
+            var refundReason = string.IsNullOrWhiteSpace(reason)
+                ? "Chủ bãi từ chối booking"
+                : $"Chủ bãi từ chối: {reason}";
+            await _walletService.RefundBookingFullAsync(
+                bookingId, booking.UserId, totalPaid, refundReason, ct);
+        }
+
         await _notificationService.CreateBookingNotificationAsync(
             booking.UserId,
             "Booking đã bị từ chối",
-            $"Đặt chỗ tại bãi xe {booking.ParkingLot?.Name ?? "bãi xe"} đã bị chủ bãi từ chối.{(string.IsNullOrWhiteSpace(reason) ? "" : $" Lý do: {reason}")}",
+            $"Đặt chỗ tại bãi xe {booking.ParkingLot?.Name ?? "bãi xe"} đã bị chủ bãi từ chối và hoàn tiền.{(string.IsNullOrWhiteSpace(reason) ? "" : $" Lý do: {reason}")}",
             bookingId,
             ct);
     }

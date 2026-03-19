@@ -14,15 +14,18 @@ public sealed class AdminService : IAdminService
     private readonly SmartParkingDBContext _context;
     private readonly CommissionSettings _commissionSettings;
     private readonly OwnerSubscriptionSettings _subscriptionSettings;
+    private readonly IWalletService _walletService;
 
     public AdminService(
         SmartParkingDBContext context,
         IOptions<CommissionSettings> commissionSettings,
-        IOptions<OwnerSubscriptionSettings> subscriptionSettings)
+        IOptions<OwnerSubscriptionSettings> subscriptionSettings,
+        IWalletService walletService)
     {
         _context = context;
         _commissionSettings = commissionSettings.Value;
         _subscriptionSettings = subscriptionSettings.Value;
+        _walletService = walletService;
     }
 
     #region Transactions
@@ -285,26 +288,27 @@ public sealed class AdminService : IAdminService
     {
         var payment = await _context.PaymentTransactions
             .Include(p => p.Booking)
+                .ThenInclude(b => b!.ParkingLot)
             .FirstOrDefaultAsync(p => p.PaymentId == paymentId && !p.IsDeleted, ct);
 
         if (payment == null)
         {
-            throw new NotFoundException("Transaction not found");
+            throw new NotFoundException("Không tìm thấy giao dịch.");
         }
 
         if (payment.PaymentStatus != "Success")
         {
-            throw new BadRequestException("Can only refund successful transactions");
+            throw new BadRequestException("Chỉ có thể hoàn tiền giao dịch thành công.");
         }
 
         if (payment.RefundedAt.HasValue)
         {
-            throw new BadRequestException("Transaction has already been refunded");
+            throw new BadRequestException("Giao dịch đã được hoàn tiền trước đó.");
         }
 
         if (request.RefundAmount > payment.Amount)
         {
-            throw new BadRequestException("Refund amount cannot exceed original amount");
+            throw new BadRequestException("Số tiền hoàn không được vượt quá số tiền gốc.");
         }
 
         payment.RefundAmount = request.RefundAmount;
@@ -315,7 +319,6 @@ public sealed class AdminService : IAdminService
         payment.UpdatedAt = DateTime.UtcNow;
         payment.UpdatedBy = adminId;
 
-        // Also update booking status if full refund
         if (payment.Booking != null && request.RefundAmount == payment.Amount)
         {
             payment.Booking.Status = "Cancelled";
@@ -323,6 +326,20 @@ public sealed class AdminService : IAdminService
         }
 
         await _context.SaveChangesAsync(ct);
+
+        if (payment.Booking != null)
+        {
+            var reason = string.IsNullOrWhiteSpace(request.Reason)
+                ? "Admin hoàn tiền"
+                : $"Admin hoàn tiền: {request.Reason}";
+
+            await _walletService.RefundBookingFullAsync(
+                payment.Booking.BookingId,
+                payment.UserId,
+                request.RefundAmount,
+                reason,
+                ct);
+        }
 
         return await GetTransactionByIdAsync(paymentId, ct);
     }

@@ -1,5 +1,7 @@
+using Microsoft.Extensions.Options;
 using SmartParking.Application.Common.Exceptions;
 using SmartParking.Application.Common.Models;
+using SmartParking.Application.Common.Settings;
 using SmartParking.Application.DTOs.Notification;
 using SmartParking.Application.Interfaces.Repositories;
 using SmartParking.Application.Interfaces.Services;
@@ -16,19 +18,22 @@ public sealed class WalletService : IWalletService
     private readonly IBookingRepository _bookingRepository;
     private readonly IOwnerUpgradeRequestRepository _ownerUpgradeRequestRepository;
     private readonly INotificationService _notificationService;
+    private readonly CommissionSettings _commissionSettings;
 
     public WalletService(
         IUserWalletRepository walletRepository,
         IPaymentRepository paymentRepository,
         IBookingRepository bookingRepository,
         IOwnerUpgradeRequestRepository ownerUpgradeRequestRepository,
-        INotificationService notificationService)
+        INotificationService notificationService,
+        IOptions<CommissionSettings> commissionSettings)
     {
         _walletRepository = walletRepository;
         _paymentRepository = paymentRepository;
         _bookingRepository = bookingRepository;
         _ownerUpgradeRequestRepository = ownerUpgradeRequestRepository;
         _notificationService = notificationService;
+        _commissionSettings = commissionSettings.Value;
     }
 
     public async Task<decimal> GetBalanceAsync(Guid userId, CancellationToken ct = default)
@@ -223,7 +228,34 @@ public sealed class WalletService : IWalletService
         await _walletRepository.AddTransactionAsync(walletTrans, ct);
         await _paymentRepository.CreateAsync(payment, ct);
 
-        // Thông báo thanh toán gia hạn thành công
+        var ownerId = booking.ParkingLot?.OwnerId ?? Guid.Empty;
+        if (ownerId != Guid.Empty && extensionAmount > 0)
+        {
+            var commissionRate = _commissionSettings.CommissionRatePercent / 100m;
+            var commissionAmount = Math.Round(extensionAmount * commissionRate, 0);
+            var ownerAmount = extensionAmount - commissionAmount;
+
+            var ownerWallet = await _walletRepository.GetOrCreateAsync(ownerId, ct);
+            ownerWallet.Balance += ownerAmount;
+            ownerWallet.UpdatedAt = DateTime.UtcNow;
+
+            var ownerTrans = new WalletTransaction
+            {
+                WalletTransactionId = Guid.NewGuid(),
+                UserId = ownerId,
+                Amount = ownerAmount,
+                Type = "BookingIncome",
+                BalanceAfter = ownerWallet.Balance,
+                BookingId = bookingId,
+                Description = $"Thu tiền gia hạn #{bookingId:N} (sau phí {_commissionSettings.CommissionRatePercent}%)",
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await _walletRepository.UpdateAsync(ownerWallet, ct);
+            await _walletRepository.AddTransactionAsync(ownerTrans, ct);
+            await CreditAdminCommissionAsync(commissionAmount, bookingId, $"Hoa hồng {_commissionSettings.CommissionRatePercent}% gia hạn #{bookingId:N}", ct);
+        }
+
         await _notificationService.CreatePaymentNotificationAsync(
             userId, "Thanh toán gia hạn thành công", $"Bạn đã thanh toán {extensionAmount:N0}đ cho gia hạn đặt chỗ.", payment.PaymentId, ct);
 
@@ -282,7 +314,8 @@ public sealed class WalletService : IWalletService
         await _paymentRepository.CreateAsync(payment, ct);
         await _ownerUpgradeRequestRepository.UpdatePaymentAsync(ownerUpgradeRequestId, payment.PaymentId, ct);
 
-        // Thông báo thanh toán phí đăng ký thành công
+        await CreditAdminCommissionAsync(amount, null, $"Phí đăng ký owner #{ownerUpgradeRequestId:N}", ct);
+
         await _notificationService.SendNotificationAsync(
             new SendNotificationDto(UserId: userId, Title: "Thanh toán phí đăng ký thành công", Message: $"Bạn đã thanh toán {amount:N0}đ cho phí đăng ký làm chủ bãi xe. Yêu cầu đang chờ Admin duyệt.", Type: "Success"),
             null, ct);
@@ -290,59 +323,122 @@ public sealed class WalletService : IWalletService
         return new PayWithWalletResultDto(true, "Thanh toán phí đăng ký thành công", wallet.Balance);
     }
 
-    /// <summary>Chuyển tiền booking sang ví owner khi thanh toán thành công (hoặc khi owner duyệt nếu chưa chuyển).</summary>
+    /// <summary>Chuyển tiền booking sang ví owner (trừ commission) và ví admin (commission).</summary>
     public async Task<bool> TransferBookingToOwnerAsync(Guid bookingId, decimal amount, Guid ownerId, CancellationToken ct = default)
     {
         if (amount <= 0) return false;
 
-        // Tránh chuyển trùng nếu đã chuyển từ PayWithWallet/SePay
         if (await _walletRepository.HasBookingIncomeForBookingAsync(bookingId, ct))
             return true;
 
-        var ownerWallet = await _walletRepository.GetOrCreateAsync(ownerId, ct);
-        ownerWallet.Balance += amount;
-        ownerWallet.UpdatedAt = DateTime.UtcNow;
-
-        var transaction = new WalletTransaction
-        {
-            WalletTransactionId = Guid.NewGuid(),
-            UserId = ownerId,
-            Amount = amount,
-            Type = "BookingIncome",
-            BalanceAfter = ownerWallet.Balance,
-            BookingId = bookingId,
-            Description = $"Thu tiền booking #{bookingId:N}",
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await _walletRepository.UpdateAsync(ownerWallet, ct);
-        await _walletRepository.AddTransactionAsync(transaction, ct);
-        return true;
-    }
-
-    /// <summary>Hoàn 70% thời gian chưa dùng khi checkout sớm: trừ owner, cộng user.</summary>
-    public async Task<bool> RefundEarlyCheckoutAsync(Guid bookingId, decimal refundAmount, Guid userId, Guid ownerId, CancellationToken ct = default)
-    {
-        if (refundAmount <= 0) return false;
+        var commissionRate = _commissionSettings.CommissionRatePercent / 100m;
+        var commissionAmount = Math.Round(amount * commissionRate, 0);
+        var ownerAmount = amount - commissionAmount;
 
         var ownerWallet = await _walletRepository.GetOrCreateAsync(ownerId, ct);
-        if (ownerWallet.Balance < refundAmount)
-            return false;
-
-        ownerWallet.Balance -= refundAmount;
+        ownerWallet.Balance += ownerAmount;
         ownerWallet.UpdatedAt = DateTime.UtcNow;
 
         var ownerTrans = new WalletTransaction
         {
             WalletTransactionId = Guid.NewGuid(),
             UserId = ownerId,
-            Amount = -refundAmount,
+            Amount = ownerAmount,
+            Type = "BookingIncome",
+            BalanceAfter = ownerWallet.Balance,
+            BookingId = bookingId,
+            Description = $"Thu tiền booking #{bookingId:N} (sau phí {_commissionSettings.CommissionRatePercent}%)",
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _walletRepository.UpdateAsync(ownerWallet, ct);
+        await _walletRepository.AddTransactionAsync(ownerTrans, ct);
+
+        await CreditAdminCommissionAsync(commissionAmount, bookingId, $"Hoa hồng {_commissionSettings.CommissionRatePercent}% booking #{bookingId:N}", ct);
+
+        return true;
+    }
+
+    /// <summary>Cộng tiền hoa hồng/phí vào ví Admin.</summary>
+    private async Task CreditAdminCommissionAsync(decimal amount, Guid? bookingId, string description, CancellationToken ct)
+    {
+        if (amount <= 0) return;
+        var adminId = await _walletRepository.GetFirstAdminUserIdAsync(ct);
+        if (adminId == null) return;
+
+        var adminWallet = await _walletRepository.GetOrCreateAsync(adminId.Value, ct);
+        adminWallet.Balance += amount;
+        adminWallet.UpdatedAt = DateTime.UtcNow;
+
+        var trans = new WalletTransaction
+        {
+            WalletTransactionId = Guid.NewGuid(),
+            UserId = adminId.Value,
+            Amount = amount,
+            Type = "PlatformCommission",
+            BalanceAfter = adminWallet.Balance,
+            BookingId = bookingId,
+            Description = description,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _walletRepository.UpdateAsync(adminWallet, ct);
+        await _walletRepository.AddTransactionAsync(trans, ct);
+    }
+
+    /// <summary>Hoàn 70% thời gian chưa dùng khi checkout sớm: trừ Owner (phần 90%) + Admin (phần 10%), cộng User.</summary>
+    public async Task<bool> RefundEarlyCheckoutAsync(Guid bookingId, decimal refundAmount, Guid userId, Guid ownerId, CancellationToken ct = default)
+    {
+        if (refundAmount <= 0) return false;
+
+        var commissionRate = _commissionSettings.CommissionRatePercent / 100m;
+        var adminShare = Math.Round(refundAmount * commissionRate, 0);
+        var ownerShare = refundAmount - adminShare;
+
+        var ownerWallet = await _walletRepository.GetOrCreateAsync(ownerId, ct);
+        ownerWallet.Balance -= ownerShare;
+        ownerWallet.UpdatedAt = DateTime.UtcNow;
+
+        var ownerTrans = new WalletTransaction
+        {
+            WalletTransactionId = Guid.NewGuid(),
+            UserId = ownerId,
+            Amount = -ownerShare,
             Type = "EarlyCheckoutRefund",
             BalanceAfter = ownerWallet.Balance,
             BookingId = bookingId,
-            Description = $"Hoàn tiền checkout sớm #{bookingId:N}",
+            Description = $"Hoàn tiền checkout sớm #{bookingId:N} (phần owner)",
             CreatedAt = DateTime.UtcNow
         };
+
+        await _walletRepository.UpdateAsync(ownerWallet, ct);
+        await _walletRepository.AddTransactionAsync(ownerTrans, ct);
+
+        if (adminShare > 0)
+        {
+            var adminId = await _walletRepository.GetFirstAdminUserIdAsync(ct);
+            if (adminId != null)
+            {
+                var adminWallet = await _walletRepository.GetOrCreateAsync(adminId.Value, ct);
+                adminWallet.Balance -= adminShare;
+                adminWallet.UpdatedAt = DateTime.UtcNow;
+
+                var adminTrans = new WalletTransaction
+                {
+                    WalletTransactionId = Guid.NewGuid(),
+                    UserId = adminId.Value,
+                    Amount = -adminShare,
+                    Type = "CommissionRefund",
+                    BalanceAfter = adminWallet.Balance,
+                    BookingId = bookingId,
+                    Description = $"Hoàn hoa hồng checkout sớm #{bookingId:N}",
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                await _walletRepository.UpdateAsync(adminWallet, ct);
+                await _walletRepository.AddTransactionAsync(adminTrans, ct);
+            }
+        }
 
         var userWallet = await _walletRepository.GetOrCreateAsync(userId, ct);
         userWallet.Balance += refundAmount;
@@ -360,10 +456,106 @@ public sealed class WalletService : IWalletService
             CreatedAt = DateTime.UtcNow
         };
 
-        await _walletRepository.UpdateAsync(ownerWallet, ct);
-        await _walletRepository.AddTransactionAsync(ownerTrans, ct);
         await _walletRepository.UpdateAsync(userWallet, ct);
         await _walletRepository.AddTransactionAsync(userTrans, ct);
+
+        await _notificationService.SendNotificationAsync(
+            new SendNotificationDto(UserId: userId, Title: "Hoàn tiền checkout sớm", Message: $"Bạn được hoàn {refundAmount:N0}đ (70% thời gian chưa dùng).", Type: "Success"),
+            null, ct);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Hoàn tiền booking đầy đủ: reverse Owner income + Admin commission → User.
+    /// Dùng khi User hủy, Owner reject, hoặc Admin refund.
+    /// </summary>
+    public async Task<bool> RefundBookingFullAsync(Guid bookingId, Guid userId, decimal refundAmount, string reason, CancellationToken ct = default)
+    {
+        if (refundAmount <= 0) return false;
+
+        var commissionRate = _commissionSettings.CommissionRatePercent / 100m;
+        var adminShare = Math.Round(refundAmount * commissionRate, 0);
+        var ownerShare = refundAmount - adminShare;
+
+        var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
+        var ownerId = booking?.ParkingLot?.OwnerId ?? Guid.Empty;
+
+        if (ownerId != Guid.Empty)
+        {
+            var hasIncome = await _walletRepository.HasBookingIncomeForBookingAsync(bookingId, ct);
+            if (hasIncome)
+            {
+                var ownerWallet = await _walletRepository.GetOrCreateAsync(ownerId, ct);
+                ownerWallet.Balance -= ownerShare;
+                ownerWallet.UpdatedAt = DateTime.UtcNow;
+
+                var ownerTrans = new WalletTransaction
+                {
+                    WalletTransactionId = Guid.NewGuid(),
+                    UserId = ownerId,
+                    Amount = -ownerShare,
+                    Type = "BookingRefund",
+                    BalanceAfter = ownerWallet.Balance,
+                    BookingId = bookingId,
+                    Description = $"Hoàn tiền booking #{bookingId:N}: {reason}",
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                await _walletRepository.UpdateAsync(ownerWallet, ct);
+                await _walletRepository.AddTransactionAsync(ownerTrans, ct);
+            }
+        }
+
+        if (adminShare > 0)
+        {
+            var adminId = await _walletRepository.GetFirstAdminUserIdAsync(ct);
+            if (adminId != null)
+            {
+                var adminWallet = await _walletRepository.GetOrCreateAsync(adminId.Value, ct);
+                adminWallet.Balance -= adminShare;
+                adminWallet.UpdatedAt = DateTime.UtcNow;
+
+                var adminTrans = new WalletTransaction
+                {
+                    WalletTransactionId = Guid.NewGuid(),
+                    UserId = adminId.Value,
+                    Amount = -adminShare,
+                    Type = "CommissionRefund",
+                    BalanceAfter = adminWallet.Balance,
+                    BookingId = bookingId,
+                    Description = $"Hoàn hoa hồng booking #{bookingId:N}: {reason}",
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                await _walletRepository.UpdateAsync(adminWallet, ct);
+                await _walletRepository.AddTransactionAsync(adminTrans, ct);
+            }
+        }
+
+        var userWallet = await _walletRepository.GetOrCreateAsync(userId, ct);
+        userWallet.Balance += refundAmount;
+        userWallet.UpdatedAt = DateTime.UtcNow;
+
+        var userTrans = new WalletTransaction
+        {
+            WalletTransactionId = Guid.NewGuid(),
+            UserId = userId,
+            Amount = refundAmount,
+            Type = "Refund",
+            BalanceAfter = userWallet.Balance,
+            BookingId = bookingId,
+            Description = $"Hoàn tiền: {reason}",
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _walletRepository.UpdateAsync(userWallet, ct);
+        await _walletRepository.AddTransactionAsync(userTrans, ct);
+
+        await _notificationService.SendNotificationAsync(
+            new SendNotificationDto(UserId: userId, Title: "Hoàn tiền booking", Message: $"Bạn được hoàn {refundAmount:N0}đ. Lý do: {reason}", Type: "Success"),
+            null, ct);
+
         return true;
     }
 }

@@ -11,4 +11,5 @@ public interface IUserWalletRepository
     Task<PagedResult<WalletTransaction>> GetTransactionsAsync(Guid userId, int page, int pageSize, CancellationToken ct = default);
     Task AddTransactionAsync(WalletTransaction transaction, CancellationToken ct = default);
     Task<bool> HasBookingIncomeForBookingAsync(Guid bookingId, CancellationToken ct = default);
+    Task<Guid?> GetFirstAdminUserIdAsync(CancellationToken ct = default);
 }

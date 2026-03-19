@@ -17,8 +17,12 @@ public interface IWalletService
     /// <summary>Chuyển tiền booking sang ví owner khi owner duyệt.</summary>
     Task<bool> TransferBookingToOwnerAsync(Guid bookingId, decimal amount, Guid ownerId, CancellationToken ct = default);
 
-    /// <summary>Hoàn tiền 70% thời gian chưa dùng khi checkout sớm.</summary>
+    /// <summary>Hoàn tiền 70% thời gian chưa dùng khi checkout sớm (trừ Owner + Admin, cộng User).</summary>
     Task<bool> RefundEarlyCheckoutAsync(Guid bookingId, decimal refundAmount, Guid userId, Guid ownerId, CancellationToken ct = default);
+
+    /// <summary>Hoàn tiền booking đầy đủ: reverse Owner income + Admin commission → User.
+    /// Dùng khi User hủy, Owner reject, hoặc Admin refund.</summary>
+    Task<bool> RefundBookingFullAsync(Guid bookingId, Guid userId, decimal refundAmount, string reason, CancellationToken ct = default);
 }
 
 public record WalletTransactionDto(

@@ -72,4 +72,12 @@ public sealed class UserWalletRepository : IUserWalletRepository
         return await _context.WalletTransactions
             .AnyAsync(w => w.BookingId == bookingId && w.Type == "BookingIncome", ct);
     }
+
+    public async Task<Guid?> GetFirstAdminUserIdAsync(CancellationToken ct = default)
+    {
+        var adminRole = await _context.Roles.FirstOrDefaultAsync(r => r.RoleName == "Admin", ct);
+        if (adminRole == null) return null;
+        var admin = await _context.Users.FirstOrDefaultAsync(u => u.RoleId == adminRole.RoleId, ct);
+        return admin?.UserId;
+    }
 }
