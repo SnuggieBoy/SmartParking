@@ -1,3 +1,4 @@
+using System.Threading.RateLimiting;
 using SmartParking.API.DependencyInjection;
 using SmartParking.API.Middlewares;
 
@@ -8,9 +9,33 @@ ValidateSecrets(builder.Configuration, builder.Environment);
 
 builder.Services.AddApi(builder.Configuration);
 
+// Health checks for load balancer / monitoring
+builder.Services.AddHealthChecks();
+
+// Rate limiting: auth endpoints stricter, general API moderate
+builder.Services.AddRateLimiter(options =>
+{
+    options.GlobalLimiter = PartitionedRateLimiter.Create<Microsoft.AspNetCore.Http.HttpContext, string>(ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 100,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
+    options.OnRejected = async (ctx, ct) =>
+    {
+        ctx.HttpContext.Response.StatusCode = 429;
+        await ctx.HttpContext.Response.WriteAsJsonAsync(new { message = "Quá nhiều yêu cầu. Vui lòng thử lại sau." }, ct);
+    };
+});
+
 var app = builder.Build();
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseRateLimiter();
 
 // Swagger: Bật cả Development và Production (giống TechStore - dễ test trên Azure)
 app.UseSwagger();
@@ -32,6 +57,10 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Health endpoints: /health (liveness), /health/ready (readiness - same for now)
+app.MapHealthChecks("/health");
+app.MapHealthChecks("/health/ready");
 
 app.Run();
 

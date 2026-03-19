@@ -100,6 +100,19 @@ public static class ServiceCollectionExtensions
                 IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["SecretKey"]!)),
                 ClockSkew = TimeSpan.Zero
             };
+            // Read token from httpOnly cookie (Web) when Authorization header is empty (Mobile uses Bearer)
+            options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
+            {
+                OnMessageReceived = ctx =>
+                {
+                    var token = ctx.Request.Headers.Authorization.FirstOrDefault()?.Replace("Bearer ", "");
+                    if (string.IsNullOrEmpty(token) && ctx.Request.Cookies.TryGetValue(Helpers.AuthCookieHelper.AccessTokenCookieName, out var cookieToken))
+                        ctx.Token = cookieToken;
+                    else if (!string.IsNullOrEmpty(token))
+                        ctx.Token = token;
+                    return Task.CompletedTask;
+                }
+            };
         });
 
         // Policy-Based Authorization

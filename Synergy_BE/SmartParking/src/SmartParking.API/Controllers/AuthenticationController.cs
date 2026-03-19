@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SmartParking.API.Helpers;
 using SmartParking.API.Models.Auth;
 using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.Auth;
@@ -14,10 +15,12 @@ namespace SmartParking.API.Controllers;
 public sealed class AuthenticationController : BaseApiController
 {
     private readonly IAuthenticationService _authService;
+    private readonly IConfiguration _configuration;
 
-    public AuthenticationController(IAuthenticationService authService)
+    public AuthenticationController(IAuthenticationService authService, IConfiguration configuration)
     {
         _authService = authService;
+        _configuration = configuration;
     }
 
     /// <summary>
@@ -53,7 +56,12 @@ public sealed class AuthenticationController : BaseApiController
     {
         var dto = new VerifyOtpRequestDto(request.Email, request.OtpCode);
         var response = await _authService.VerifyOtpAndRegisterAsync(dto, ct);
-        return Ok(ApiResponse<AuthResponseDto>.SuccessResponse(response, Messages.Auth.OtpVerifiedSuccess));
+        var result = Ok(ApiResponse<AuthResponseDto>.SuccessResponse(response, Messages.Auth.OtpVerifiedSuccess));
+        if (Request.Headers["X-Use-Cookies"].FirstOrDefault() == "true")
+        {
+            AuthCookieHelper.SetAuthCookies(Response, response.AccessToken, response.RefreshToken, _configuration);
+        }
+        return result;
     }
 
     /// <summary>
@@ -81,19 +89,34 @@ public sealed class AuthenticationController : BaseApiController
     {
         var dto = new LoginRequestDto(request.Email, request.Password);
         var response = await _authService.LoginAsync(dto, ct);
-        return Ok(ApiResponse<AuthResponseDto>.SuccessResponse(response, Messages.Auth.LoginSuccess));
+        var result = Ok(ApiResponse<AuthResponseDto>.SuccessResponse(response, Messages.Auth.LoginSuccess));
+        if (Request.Headers["X-Use-Cookies"].FirstOrDefault() == "true")
+        {
+            AuthCookieHelper.SetAuthCookies(Response, response.AccessToken, response.RefreshToken, _configuration);
+        }
+        return result;
     }
 
     [HttpPost("refresh")]
     [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<ApiResponse<AuthResponseDto>>> RefreshToken(
-        [FromBody] RefreshTokenRequest request,
+        [FromBody] RefreshTokenRequest? request,
         CancellationToken ct)
     {
-        var dto = new RefreshTokenRequestDto(request.RefreshToken);
+        var refreshToken = request?.RefreshToken ?? Request.Cookies["refreshToken"];
+        if (string.IsNullOrEmpty(refreshToken))
+        {
+            return Unauthorized(ApiResponse.FailureResponse(Messages.Common.Unauthorized));
+        }
+        var dto = new RefreshTokenRequestDto(refreshToken);
         var response = await _authService.RefreshTokenAsync(dto, ct);
-        return Ok(ApiResponse<AuthResponseDto>.SuccessResponse(response, Messages.Auth.TokenRefreshed));
+        var result = Ok(ApiResponse<AuthResponseDto>.SuccessResponse(response, Messages.Auth.TokenRefreshed));
+        if (Request.Headers["X-Use-Cookies"].FirstOrDefault() == "true")
+        {
+            AuthCookieHelper.SetAuthCookies(Response, response.AccessToken, response.RefreshToken, _configuration);
+        }
+        return result;
     }
 
     [Authorize]
@@ -109,6 +132,22 @@ public sealed class AuthenticationController : BaseApiController
         }
 
         await _authService.LogoutAsync(userId, ct);
+        var result = Ok(ApiResponse.SuccessResponse(Messages.Auth.LogoutSuccess));
+        if (Request.Headers["X-Use-Cookies"].FirstOrDefault() == "true")
+        {
+            AuthCookieHelper.ClearAuthCookies(Response);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Logout when using cookie auth - clears auth cookies (no token required)
+    /// </summary>
+    [HttpPost("logout-cookies")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    public IActionResult LogoutCookies()
+    {
+        AuthCookieHelper.ClearAuthCookies(Response);
         return Ok(ApiResponse.SuccessResponse(Messages.Auth.LogoutSuccess));
     }
 
