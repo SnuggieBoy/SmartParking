@@ -124,6 +124,9 @@ public sealed class WalletService : IWalletService
         if (booking.UserId != userId)
             return new PayWithWalletResultDto(false, "Bạn không có quyền thanh toán booking này", null);
 
+        if (amount != booking.TotalAmount)
+            return new PayWithWalletResultDto(false, $"Số tiền thanh toán ({amount:N0}đ) không khớp với giá booking ({booking.TotalAmount:N0}đ)", null);
+
         var existingPayment = await _paymentRepository.GetLatestByBookingIdAsync(bookingId, ct);
         if (existingPayment?.PaymentStatus == nameof(PaymentStatus.Success))
             return new PayWithWalletResultDto(false, "Booking đã được thanh toán", null);
@@ -190,6 +193,10 @@ public sealed class WalletService : IWalletService
 
         if (booking.UserId != userId)
             return new PayWithWalletResultDto(false, "Bạn không có quyền thanh toán gia hạn này", null);
+
+        if (booking.Status != nameof(Domain.Enums.BookingStatus.InProgress) &&
+            booking.Status != nameof(Domain.Enums.BookingStatus.Confirmed))
+            return new PayWithWalletResultDto(false, "Booking không ở trạng thái có thể gia hạn", null);
 
         var wallet = await _walletRepository.GetOrCreateAsync(userId, ct);
         if (wallet.Balance < extensionAmount)
@@ -394,6 +401,7 @@ public sealed class WalletService : IWalletService
         var commissionRate = _commissionSettings.CommissionRatePercent / 100m;
         var adminShare = Math.Round(refundAmount * commissionRate, 0);
         var ownerShare = refundAmount - adminShare;
+        decimal actualRefunded = 0;
 
         var ownerWallet = await _walletRepository.GetOrCreateAsync(ownerId, ct);
         ownerWallet.Balance -= ownerShare;
@@ -413,6 +421,7 @@ public sealed class WalletService : IWalletService
 
         await _walletRepository.UpdateAsync(ownerWallet, ct);
         await _walletRepository.AddTransactionAsync(ownerTrans, ct);
+        actualRefunded += ownerShare;
 
         if (adminShare > 0)
         {
@@ -437,18 +446,21 @@ public sealed class WalletService : IWalletService
 
                 await _walletRepository.UpdateAsync(adminWallet, ct);
                 await _walletRepository.AddTransactionAsync(adminTrans, ct);
+                actualRefunded += adminShare;
             }
         }
 
+        if (actualRefunded <= 0) return false;
+
         var userWallet = await _walletRepository.GetOrCreateAsync(userId, ct);
-        userWallet.Balance += refundAmount;
+        userWallet.Balance += actualRefunded;
         userWallet.UpdatedAt = DateTime.UtcNow;
 
         var userTrans = new WalletTransaction
         {
             WalletTransactionId = Guid.NewGuid(),
             UserId = userId,
-            Amount = refundAmount,
+            Amount = actualRefunded,
             Type = "Refund",
             BalanceAfter = userWallet.Balance,
             BookingId = bookingId,
@@ -460,7 +472,7 @@ public sealed class WalletService : IWalletService
         await _walletRepository.AddTransactionAsync(userTrans, ct);
 
         await _notificationService.SendNotificationAsync(
-            new SendNotificationDto(UserId: userId, Title: "Hoàn tiền checkout sớm", Message: $"Bạn được hoàn {refundAmount:N0}đ (70% thời gian chưa dùng).", Type: "Success"),
+            new SendNotificationDto(UserId: userId, Title: "Hoàn tiền checkout sớm", Message: $"Bạn được hoàn {actualRefunded:N0}đ (70% thời gian chưa dùng).", Type: "Success"),
             null, ct);
 
         return true;
@@ -477,6 +489,8 @@ public sealed class WalletService : IWalletService
         var commissionRate = _commissionSettings.CommissionRatePercent / 100m;
         var adminShare = Math.Round(refundAmount * commissionRate, 0);
         var ownerShare = refundAmount - adminShare;
+
+        decimal actualRefunded = 0;
 
         var booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
         var ownerId = booking?.ParkingLot?.OwnerId ?? Guid.Empty;
@@ -504,6 +518,7 @@ public sealed class WalletService : IWalletService
 
                 await _walletRepository.UpdateAsync(ownerWallet, ct);
                 await _walletRepository.AddTransactionAsync(ownerTrans, ct);
+                actualRefunded += ownerShare;
             }
         }
 
@@ -530,18 +545,21 @@ public sealed class WalletService : IWalletService
 
                 await _walletRepository.UpdateAsync(adminWallet, ct);
                 await _walletRepository.AddTransactionAsync(adminTrans, ct);
+                actualRefunded += adminShare;
             }
         }
 
+        if (actualRefunded <= 0) return false;
+
         var userWallet = await _walletRepository.GetOrCreateAsync(userId, ct);
-        userWallet.Balance += refundAmount;
+        userWallet.Balance += actualRefunded;
         userWallet.UpdatedAt = DateTime.UtcNow;
 
         var userTrans = new WalletTransaction
         {
             WalletTransactionId = Guid.NewGuid(),
             UserId = userId,
-            Amount = refundAmount,
+            Amount = actualRefunded,
             Type = "Refund",
             BalanceAfter = userWallet.Balance,
             BookingId = bookingId,
@@ -553,7 +571,7 @@ public sealed class WalletService : IWalletService
         await _walletRepository.AddTransactionAsync(userTrans, ct);
 
         await _notificationService.SendNotificationAsync(
-            new SendNotificationDto(UserId: userId, Title: "Hoàn tiền booking", Message: $"Bạn được hoàn {refundAmount:N0}đ. Lý do: {reason}", Type: "Success"),
+            new SendNotificationDto(UserId: userId, Title: "Hoàn tiền booking", Message: $"Bạn được hoàn {actualRefunded:N0}đ. Lý do: {reason}", Type: "Success"),
             null, ct);
 
         return true;

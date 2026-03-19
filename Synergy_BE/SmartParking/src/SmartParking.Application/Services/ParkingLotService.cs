@@ -58,8 +58,15 @@ public sealed class ParkingLotService : IParkingLotService
             filter.PageSize,
             ct);
 
-        var dtos = pagedResult.Items.Select(lot => MapToResponseDto(lot)).ToList();
-        
+        var lotIds = pagedResult.Items.Select(l => l.ParkingLotId).ToList();
+        var locationMap = await _parkingLocationRepository.GetByParkingLotIdsAsync(lotIds, ct);
+
+        var dtos = pagedResult.Items.Select(lot =>
+        {
+            locationMap.TryGetValue(lot.ParkingLotId, out var loc);
+            return MapToResponseDto(lot, loc);
+        }).ToList();
+
         return new PagedResult<ParkingLotResponseDto>(
             dtos,
             pagedResult.Page,
@@ -177,7 +184,8 @@ public sealed class ParkingLotService : IParkingLotService
                 created.ParkingLotId);
         }
 
-        return MapToResponseDto(created);
+        var savedLocation = await _parkingLocationRepository.GetByParkingLotIdAsync(created.ParkingLotId, includeDeleted: false, ct);
+        return MapToResponseDto(created, savedLocation);
     }
 
     public async Task<ParkingLotResponseDto> UpdateAsync(
@@ -269,7 +277,8 @@ public sealed class ParkingLotService : IParkingLotService
                 parkingLotId);
         }
 
-        return MapToResponseDto(parkingLot);
+        var savedLocation = await _parkingLocationRepository.GetByParkingLotIdAsync(parkingLotId, includeDeleted: false, ct);
+        return MapToResponseDto(parkingLot, savedLocation);
     }
 
     public async Task DeleteAsync(Guid parkingLotId, Guid userId, bool isAdmin, CancellationToken ct = default)
@@ -295,10 +304,13 @@ public sealed class ParkingLotService : IParkingLotService
             throw new NotFoundException(Messages.ParkingLot.NotFound);
         }
 
-        // SECURITY: Validate ownership or Admin access
         SecurityHelper.ValidateOwnership(parkingLot.OwnerId, userId, isAdmin);
 
-        // Toggle IsActive
+        if (!parkingLot.IsActive && parkingLot.Status != ParkingLotStatus.Approved)
+        {
+            throw new BadRequestException("Bãi xe chưa được duyệt, không thể kích hoạt.");
+        }
+
         parkingLot.IsActive = !parkingLot.IsActive;
         parkingLot.UpdatedAt = DateTime.UtcNow;
         parkingLot.UpdatedBy = userId;

@@ -151,6 +151,20 @@ public sealed class ParkingLocationRepository : IParkingLocationRepository
         return new PagedResult<ParkingLocation>(items, page, pageSize, totalCount);
     }
 
+    public async Task<Dictionary<Guid, ParkingLocation>> GetByParkingLotIdsAsync(IEnumerable<Guid> parkingLotIds, CancellationToken ct = default)
+    {
+        var ids = parkingLotIds.ToList();
+        if (ids.Count == 0) return new Dictionary<Guid, ParkingLocation>();
+
+        var locations = await _context.ParkingLocations
+            .AsNoTracking()
+            .Where(l => !l.IsDeleted && ids.Contains(l.ParkingLotId))
+            .ToListAsync(ct);
+
+        return locations.GroupBy(l => l.ParkingLotId)
+            .ToDictionary(g => g.Key, g => g.First());
+    }
+
     public async Task<ParkingLocation> CreateAsync(ParkingLocation location, CancellationToken ct = default)
     {
         _context.ParkingLocations.Add(location);

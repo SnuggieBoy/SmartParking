@@ -7,6 +7,7 @@ public interface IParkingLocationRepository
 {
     Task<ParkingLocation?> GetByIdAsync(Guid locationId, bool includeDeleted = false, CancellationToken ct = default);
     Task<ParkingLocation?> GetByParkingLotIdAsync(Guid parkingLotId, bool includeDeleted = false, CancellationToken ct = default);
+    Task<Dictionary<Guid, ParkingLocation>> GetByParkingLotIdsAsync(IEnumerable<Guid> parkingLotIds, CancellationToken ct = default);
     Task<IEnumerable<ParkingLocation>> GetNearbyAsync(
         decimal centerLat,
         decimal centerLon,

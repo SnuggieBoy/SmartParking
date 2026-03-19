@@ -158,7 +158,12 @@ public sealed class BookingService : IBookingService
 
         if (booking.Status == nameof(BookingStatus.Cancelled) || booking.Status == nameof(BookingStatus.Completed))
         {
-            throw new BadRequestException(Messages.Booking.CannotCancel);
+            throw new BadRequestException("Không thể cập nhật booking đã hoàn thành hoặc đã hủy.");
+        }
+
+        if (booking.Status == nameof(BookingStatus.InProgress))
+        {
+            throw new BadRequestException("Không thể cập nhật booking đang sử dụng.");
         }
 
         // Validate time range
@@ -204,6 +209,11 @@ public sealed class BookingService : IBookingService
             throw new BadRequestException(Messages.Booking.CannotCancel);
         }
 
+        if (booking.Status == nameof(BookingStatus.InProgress))
+        {
+            throw new BadRequestException("Không thể hủy booking đang sử dụng. Vui lòng thực hiện checkout.");
+        }
+
         booking.Status = nameof(BookingStatus.Cancelled);
         booking.UpdatedAt = DateTime.UtcNow;
 
@@ -217,12 +227,11 @@ public sealed class BookingService : IBookingService
                 bookingId, booking.UserId, totalPaid, "Người dùng hủy booking", ct);
         }
 
+        var message = totalPaid > 0
+            ? $"Đặt chỗ của bạn đã được hủy và hoàn {totalPaid:N0}đ vào ví."
+            : "Đặt chỗ của bạn đã được hủy.";
         await _notificationService.CreateBookingNotificationAsync(
-            booking.UserId,
-            "Booking đã bị hủy",
-            "Đặt chỗ của bạn đã được hủy và hoàn tiền.",
-            bookingId,
-            ct);
+            booking.UserId, "Booking đã bị hủy", message, bookingId, ct);
     }
 
     public async Task<BookingCheckInResponseDto> BookingCheckInAsync(
@@ -290,9 +299,9 @@ public sealed class BookingService : IBookingService
         var actualCharge = CalculateAmount(duration, parkingLot.PricePerHour);
 
         var paidAmount = await _paymentRepository.GetTotalPaidForBookingAsync(bookingId, ct);
-        if (paidAmount <= 0) paidAmount = booking.TotalAmount;
+        if (paidAmount <= 0) return null;
 
-        var isEarlyCheckout = actualCharge < paidAmount && paidAmount > 0;
+        var isEarlyCheckout = actualCharge < paidAmount;
         var unusedAmount = isEarlyCheckout ? paidAmount - actualCharge : 0;
         var refundAmount = Math.Round(unusedAmount * PaymentConstants.EarlyCheckoutRefundRate, 2);
 
@@ -356,13 +365,11 @@ public sealed class BookingService : IBookingService
         var actualCharge = CalculateAmount(duration, parkingLot.PricePerHour);
 
         var paidAmount = await _paymentRepository.GetTotalPaidForBookingAsync(bookingId, ct);
-        if (paidAmount <= 0) paidAmount = booking.TotalAmount;
 
         decimal refundAmount = 0;
         var ownerId = booking.ParkingLot?.OwnerId ?? Guid.Empty;
 
-        // Checkout sớm: hoàn 70% thời gian chưa dùng
-        if (actualCharge < paidAmount && paidAmount > 0)
+        if (paidAmount > 0 && actualCharge < paidAmount)
         {
             var unusedAmount = paidAmount - actualCharge;
             refundAmount = Math.Round(unusedAmount * PaymentConstants.EarlyCheckoutRefundRate, 2);
@@ -807,8 +814,8 @@ public sealed class BookingService : IBookingService
             bookingId,
             ct);
 
-        // Reload to ensure updated data
-        return MapToDto(booking);
+        booking = await _bookingRepository.GetByIdAsync(bookingId, includeDeleted: false, ct);
+        return MapToDto(booking!);
     }
 
     public async Task RejectBookingAsync(Guid bookingId, Guid ownerId, string reason, bool isAdmin = false, CancellationToken ct = default)

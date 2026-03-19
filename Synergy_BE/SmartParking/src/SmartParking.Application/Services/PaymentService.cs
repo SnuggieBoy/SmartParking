@@ -104,7 +104,7 @@ public sealed class PaymentService : IPaymentService
             TransactionRef: p.VnpTxnRef ?? p.SePayOrderId ?? "N/A",
             CreatedAt: p.CreatedAt,
             PaidAt: p.PaymentStatus == nameof(PaymentStatus.Success) ? p.UpdatedAt : null,
-            PaymentPurpose: p.BookingId != Guid.Empty ? "Booking" : "Subscription"
+            PaymentPurpose: p.BookingId.HasValue ? "Booking" : "Subscription"
         )).ToList();
 
         return new PagedResult<PaymentHistoryDto>(dtos, pagedResult.Page, pagedResult.PageSize, pagedResult.TotalCount);

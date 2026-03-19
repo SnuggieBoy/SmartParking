@@ -64,9 +64,7 @@ public sealed class ParkingLotsController : BaseApiController
         [FromQuery] int pageSize = 10,
         CancellationToken ct = default)
     {
-        // Public listing: allow client to control filtering completely
-        // Previously defaulted to Approved/Active, but this hid data if DB used different conventions (e.g. "Active" vs "Approved")
-        var effectiveIsActive = isActive; 
+        var effectiveIsActive = isActive ?? true;
         var effectiveStatus = status;
 
         var filter = new ParkingLotFilterDto(search, effectiveIsActive, effectiveStatus, provinceCode, province, wardCode, ward, null, page, pageSize);

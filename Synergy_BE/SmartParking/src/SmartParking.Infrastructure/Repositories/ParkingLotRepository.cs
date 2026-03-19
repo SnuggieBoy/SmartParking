@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SmartParking.Application.Common.Models;
 using SmartParking.Application.Interfaces.Repositories;
+using SmartParking.Domain.Constants;
 using SmartParking.Domain.Entities;
 using SmartParking.Infrastructure.Data;
 
@@ -69,7 +70,7 @@ public sealed class ParkingLotRepository : IParkingLotRepository
         }
         else if (isActive.HasValue && isActive.Value)
         {
-            query = query.Where(p => p.Status == "Approved" || p.Status == "Active");
+            query = query.Where(p => p.Status == ParkingLotStatus.Approved);
         }
 
         // Exact filter by admin codes (fast + reliable)
@@ -122,6 +123,7 @@ public sealed class ParkingLotRepository : IParkingLotRepository
     public async Task<IEnumerable<ParkingLot>> GetByOwnerIdAsync(Guid ownerId, bool includeDeleted = false, CancellationToken ct = default)
     {
         var query = _context.ParkingLots
+            .Include(p => p.Owner)
             .Where(p => p.OwnerId == ownerId);
 
         if (!includeDeleted)
@@ -205,8 +207,7 @@ public sealed class ParkingLotRepository : IParkingLotRepository
 
         if (onlyActive)
         {
-            // Accept both "Approved" and "Active" - DB may use either
-            query = query.Where(p => p.IsActive && (p.Status == "Approved" || p.Status == "Active"));
+            query = query.Where(p => p.IsActive && p.Status == ParkingLotStatus.Approved);
         }
 
         var lots = await query.ToListAsync(ct);

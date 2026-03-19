@@ -66,10 +66,16 @@ public sealed class ReviewsController : BaseApiController
     {
         var userId = GetUserIdFromToken();
         var review = await _reviewService.CreateReviewAsync(userId, request, ct);
+
+        if (review.ParkingLotId != parkingLotId)
+        {
+            return BadRequest(ApiResponse<ReviewDto>.FailureResponse("Booking không thuộc bãi xe này.", "ParkingLotId mismatch"));
+        }
+
         return CreatedAtAction(
             nameof(GetParkingLotReviews),
-            new { parkingLotId },
-            ApiResponse<ReviewDto>.SuccessResponse(review, "Review created successfully"));
+            new { parkingLotId = review.ParkingLotId },
+            ApiResponse<ReviewDto>.SuccessResponse(review, "Đánh giá đã được tạo thành công."));
     }
 
     /// <summary>

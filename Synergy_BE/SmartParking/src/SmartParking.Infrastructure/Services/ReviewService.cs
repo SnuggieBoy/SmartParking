@@ -4,6 +4,7 @@ using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.Review;
 using SmartParking.Application.Interfaces.Services;
 using SmartParking.Domain.Entities;
+using SmartParking.Domain.Enums;
 using SmartParking.Infrastructure.Data;
 
 namespace SmartParking.Infrastructure.Services;
@@ -55,28 +56,39 @@ public sealed class ReviewService : IReviewService
             throw new NotFoundException("Parking lot not found");
         }
 
-        var reviews = await _context.Reviews
+        var stats = await _context.Reviews
+            .Where(r => r.ParkingLotId == parkingLotId && !r.IsDeleted)
+            .GroupBy(r => 1)
+            .Select(g => new
+            {
+                Avg = g.Average(r => (decimal)r.Rating),
+                Total = g.Count(),
+                Star5 = g.Count(r => r.Rating == 5),
+                Star4 = g.Count(r => r.Rating == 4),
+                Star3 = g.Count(r => r.Rating == 3),
+                Star2 = g.Count(r => r.Rating == 2),
+                Star1 = g.Count(r => r.Rating == 1),
+            })
+            .FirstOrDefaultAsync(ct);
+
+        var recentReviews = await _context.Reviews
             .Include(r => r.User)
             .Where(r => r.ParkingLotId == parkingLotId && !r.IsDeleted)
+            .OrderByDescending(r => r.CreatedAt)
+            .Take(5)
             .ToListAsync(ct);
-
-        var avgRating = reviews.Any() ? (decimal)reviews.Average(r => r.Rating) : 0;
 
         return new ParkingLotReviewsSummaryDto(
             ParkingLotId: parkingLotId,
             ParkingLotName: parkingLot.Name,
-            AverageRating: Math.Round(avgRating, 1),
-            TotalReviews: reviews.Count,
-            FiveStarCount: reviews.Count(r => r.Rating == 5),
-            FourStarCount: reviews.Count(r => r.Rating == 4),
-            ThreeStarCount: reviews.Count(r => r.Rating == 3),
-            TwoStarCount: reviews.Count(r => r.Rating == 2),
-            OneStarCount: reviews.Count(r => r.Rating == 1),
-            RecentReviews: reviews
-                .OrderByDescending(r => r.CreatedAt)
-                .Take(5)
-                .Select(MapToDto)
-                .ToList()
+            AverageRating: stats != null ? Math.Round(stats.Avg, 1) : 0,
+            TotalReviews: stats?.Total ?? 0,
+            FiveStarCount: stats?.Star5 ?? 0,
+            FourStarCount: stats?.Star4 ?? 0,
+            ThreeStarCount: stats?.Star3 ?? 0,
+            TwoStarCount: stats?.Star2 ?? 0,
+            OneStarCount: stats?.Star1 ?? 0,
+            RecentReviews: recentReviews.Select(MapToDto).ToList()
         );
     }
 
@@ -101,19 +113,20 @@ public sealed class ReviewService : IReviewService
             throw new ForbiddenException();
         }
 
-        // Only completed bookings can be reviewed
-        if (booking.Status != "Completed")
+        if (booking.Status != nameof(BookingStatus.Completed))
         {
-            throw new BadRequestException("Can only review completed bookings");
+            throw new BadRequestException("Chỉ có thể đánh giá booking đã hoàn thành.");
         }
 
-        // Check if already reviewed
         var existingReview = await _context.Reviews
-            .FirstOrDefaultAsync(r => r.BookingId == request.BookingId && !r.IsDeleted, ct);
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(r => r.BookingId == request.BookingId, ct);
 
         if (existingReview != null)
         {
-            throw new BadRequestException("This booking has already been reviewed");
+            throw new BadRequestException(existingReview.IsDeleted
+                ? "Đánh giá cho booking này đã bị xóa bởi quản trị viên và không thể tạo lại."
+                : "Booking này đã được đánh giá rồi.");
         }
 
         var review = new Review
