@@ -14,10 +14,12 @@ namespace SmartParking.API.Controllers;
 public sealed class NotificationsController : BaseApiController
 {
     private readonly INotificationService _notificationService;
+    private readonly IDevicePushTokenService _devicePushTokenService;
 
-    public NotificationsController(INotificationService notificationService)
+    public NotificationsController(INotificationService notificationService, IDevicePushTokenService devicePushTokenService)
     {
         _notificationService = notificationService;
+        _devicePushTokenService = devicePushTokenService;
     }
 
     /// <summary>
@@ -71,5 +73,19 @@ public sealed class NotificationsController : BaseApiController
         var userId = GetUserIdFromToken();
         await _notificationService.MarkAllAsReadAsync(userId, ct);
         return Ok(ApiResponse.SuccessResponse("All notifications marked as read"));
+    }
+
+    /// <summary>
+    /// Đăng ký Expo Push Token cho thiết bị hiện tại.
+    /// Gọi sau khi đăng nhập để nhận push notification.
+    /// </summary>
+    [HttpPost("device")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ApiResponse>> RegisterDeviceToken([FromBody] RegisterDeviceTokenRequest request, CancellationToken ct = default)
+    {
+        var userId = GetUserIdFromToken();
+        await _devicePushTokenService.RegisterTokenAsync(userId, request.ExpoPushToken, request.Platform, ct);
+        return Ok(ApiResponse.SuccessResponse("Đã đăng ký thiết bị nhận thông báo"));
     }
 }

@@ -26,7 +26,7 @@ public sealed class WalletController : BaseApiController
     {
         var userId = GetUserIdFromToken();
         var balance = await _walletService.GetBalanceAsync(userId, ct);
-        return Ok(ApiResponse<object>.SuccessResponse(new { balance }, "Balance retrieved"));
+        return Ok(ApiResponse<object>.SuccessResponse(new { balance }, "Lấy số dư thành công"));
     }
 
     [HttpPost("topup")]
@@ -36,7 +36,7 @@ public sealed class WalletController : BaseApiController
     {
         var userId = GetUserIdFromToken();
         var result = await _walletService.TopUpAsync(userId, request.Amount, ct);
-        return Ok(ApiResponse<object>.SuccessResponse(result, "Top-up successful"));
+        return Ok(ApiResponse<object>.SuccessResponse(result, "Nạp tiền thành công"));
     }
 
     [HttpPost("topup-sepay")]
@@ -47,7 +47,7 @@ public sealed class WalletController : BaseApiController
         var userId = GetUserIdFromToken();
         var dto = new WalletTopUpRequestDto(request.Amount, request.Description ?? "Nạp tiền ví SmartParking");
         var result = await _sePayService.CreateWalletTopUpPaymentAsync(dto, userId, ct);
-        return Ok(ApiResponse<SePayPaymentResponseDto>.SuccessResponse(result, "SePay payment created"));
+        return Ok(ApiResponse<SePayPaymentResponseDto>.SuccessResponse(result, "Đã tạo thanh toán SePay"));
     }
 
     [HttpGet("transactions")]
@@ -69,7 +69,7 @@ public sealed class WalletController : BaseApiController
             createdAt = t.CreatedAt
         }).ToList();
         var paged = new PagedResult<object>(items, result.Page, result.PageSize, result.TotalCount);
-        return Ok(ApiResponse<PagedResult<object>>.SuccessResponse(paged, "Transactions retrieved"));
+        return Ok(ApiResponse<PagedResult<object>>.SuccessResponse(paged, "Lấy giao dịch thành công"));
     }
 
     [HttpPost("pay-booking")]

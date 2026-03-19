@@ -129,7 +129,7 @@ public sealed class BookingsController : BaseApiController
         var result = await _bookingService.GetCheckoutPreviewAsync(id, userId, isAdmin, isOwner, ct);
         if (result == null)
             return NotFound(ApiResponse<BookingCheckOutPreviewDto>.FailureResponse("Booking không tồn tại hoặc không thể checkout"));
-        return Ok(ApiResponse<BookingCheckOutPreviewDto>.SuccessResponse(result, "Preview checkout"));
+        return Ok(ApiResponse<BookingCheckOutPreviewDto>.SuccessResponse(result, "Xem trước hóa đơn thành công"));
     }
 
     /// <summary>

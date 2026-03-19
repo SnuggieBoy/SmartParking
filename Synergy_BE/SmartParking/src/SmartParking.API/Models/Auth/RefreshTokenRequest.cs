@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace SmartParking.API.Models.Auth;
 
 /// <summary>
@@ -6,5 +8,6 @@ namespace SmartParking.API.Models.Auth;
 /// </summary>
 public sealed class RefreshTokenRequest
 {
+    [MaxLength(512, ErrorMessage = "Refresh token không được quá 512 ký tự")]
     public string? RefreshToken { get; init; }
 }

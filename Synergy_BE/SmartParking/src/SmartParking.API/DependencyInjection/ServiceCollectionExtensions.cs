@@ -33,7 +33,7 @@ public static class ServiceCollectionExtensions
                     var problemDetails = new ValidationProblemDetails(context.ModelState)
                     {
                         Status = StatusCodes.Status400BadRequest,
-                        Title = "One or more validation errors occurred.",
+                        Title = "Có lỗi xác thực dữ liệu.",
                         Instance = context.HttpContext.Request.Path,
                         Type = "https://httpstatuses.com/400"
                     };

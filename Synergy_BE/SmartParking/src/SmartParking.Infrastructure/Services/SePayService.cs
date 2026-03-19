@@ -310,12 +310,12 @@ public sealed class SePayService : ISePayService
             payment.PaymentStatus = nameof(PaymentStatus.Failed);
             payment.Metadata = JsonSerializer.Serialize(new
             {
-                Error = "Amount mismatch",
+                Error = "Số tiền không khớp",
                 ExpectedAmount = payment.Amount,
                 ReceivedAmount = webhook.TransferAmount
             });
             await _paymentRepository.UpdateAsync(payment, ct);
-            return (false, $"Amount mismatch. Expected: {payment.Amount}, Received: {webhook.TransferAmount}");
+            return (false, $"Số tiền không khớp. Mong đợi: {payment.Amount}, Nhận được: {webhook.TransferAmount}");
         }
 
         // STEP 4: Cập nhật trạng thái "Đã thanh toán"

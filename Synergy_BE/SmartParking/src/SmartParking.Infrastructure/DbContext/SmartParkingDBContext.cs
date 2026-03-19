@@ -62,6 +62,8 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
 
     public virtual DbSet<Notification> Notifications { get; set; }
 
+    public virtual DbSet<DevicePushToken> DevicePushTokens { get; set; }
+
     public virtual DbSet<ExtensionRequest> ExtensionRequests { get; set; }
 
     public virtual DbSet<UserWallet> UserWallets { get; set; }
@@ -691,6 +693,28 @@ public partial class SmartParkingDBContext : Microsoft.EntityFrameworkCore.DbCon
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("FK_Notifications_Users");
+        });
+
+        // DevicePushToken entity - lưu Expo Push Token theo user
+        modelBuilder.Entity<DevicePushToken>(entity =>
+        {
+            entity.HasKey(e => e.DevicePushTokenId).HasName("PK_DevicePushTokens");
+            entity.Property(e => e.DevicePushTokenId).HasDefaultValueSql("(newid())");
+            entity.Property(e => e.ExpoPushToken).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.Platform).HasMaxLength(20);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+            entity.Property(e => e.LastUsedAt).HasDefaultValueSql("(sysutcdatetime())");
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.HasIndex(e => e.UserId).HasDatabaseName("IX_DevicePushTokens_UserId");
+            entity.HasIndex(e => new { e.UserId, e.ExpoPushToken })
+                .IsUnique()
+                .HasDatabaseName("UQ_DevicePushTokens_UserId_Token")
+                .HasFilter("[IsActive] = 1");
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_DevicePushTokens_Users");
         });
 
         // Global query filter for soft delete

@@ -17,6 +17,8 @@ public static class ServiceCollectionExtensions
         // Register HttpContextAccessor for audit fields
         services.AddHttpContextAccessor();
 
+        services.AddHttpClient();
+
         // Cloudinary: bind settings from appsettings, CloudinaryService creates client from config
         services.Configure<CloudinarySettings>(configuration.GetSection(CloudinarySettings.SectionName));
         services.AddScoped<ICloudinaryService, CloudinaryService>();
@@ -51,6 +53,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IFavoriteService, FavoriteService>();
         services.AddScoped<IReviewService, ReviewService>();
         services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<IDevicePushTokenService, DevicePushTokenService>();
+        services.AddScoped<IExpoPushService, ExpoPushService>();
 
         return services;
     }

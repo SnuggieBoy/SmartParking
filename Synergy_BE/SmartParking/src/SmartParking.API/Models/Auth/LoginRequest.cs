@@ -4,11 +4,13 @@ namespace SmartParking.API.Models.Auth;
 
 public sealed class LoginRequest
 {
-    [Required(ErrorMessage = "Email is required")]
-    [EmailAddress(ErrorMessage = "Invalid email format")]
+    [Required(ErrorMessage = "Email là bắt buộc")]
+    [EmailAddress(ErrorMessage = "Định dạng email không hợp lệ")]
+    [StringLength(256, ErrorMessage = "Email không được quá 256 ký tự")]
     public string Email { get; init; } = string.Empty;
 
-    [Required(ErrorMessage = "Password is required")]
-    [MinLength(6, ErrorMessage = "Password must be at least 6 characters")]
+    [Required(ErrorMessage = "Mật khẩu là bắt buộc")]
+    [MinLength(6, ErrorMessage = "Mật khẩu phải có ít nhất 6 ký tự")]
+    [StringLength(256, ErrorMessage = "Mật khẩu không được quá 256 ký tự")]
     public string Password { get; init; } = string.Empty;
 }

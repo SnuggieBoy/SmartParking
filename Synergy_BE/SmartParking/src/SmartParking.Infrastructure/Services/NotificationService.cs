@@ -12,10 +12,17 @@ namespace SmartParking.Infrastructure.Services;
 public sealed class NotificationService : INotificationService
 {
     private readonly SmartParkingDBContext _context;
+    private readonly IDevicePushTokenService _devicePushTokenService;
+    private readonly IExpoPushService _expoPushService;
 
-    public NotificationService(SmartParkingDBContext context)
+    public NotificationService(
+        SmartParkingDBContext context,
+        IDevicePushTokenService devicePushTokenService,
+        IExpoPushService expoPushService)
     {
         _context = context;
+        _devicePushTokenService = devicePushTokenService;
+        _expoPushService = expoPushService;
     }
 
     public async Task<PagedResult<NotificationDto>> GetUserNotificationsAsync(
@@ -122,6 +129,15 @@ public sealed class NotificationService : INotificationService
         _context.Notifications.Add(notification);
         await _context.SaveChangesAsync(ct);
 
+        if (request.UserId.HasValue)
+        {
+            var tokens = await _devicePushTokenService.GetActiveTokensForUserAsync(request.UserId.Value, ct);
+            if (tokens.Count > 0)
+            {
+                await _expoPushService.SendPushAsync(tokens, request.Title, request.Message, new { type = request.Type, data = request.Data }, ct);
+            }
+        }
+
         return MapToDto(notification);
     }
 
@@ -202,6 +218,12 @@ public sealed class NotificationService : INotificationService
 
         _context.Notifications.Add(notification);
         await _context.SaveChangesAsync(ct);
+
+        var tokens = await _devicePushTokenService.GetActiveTokensForUserAsync(userId, ct);
+        if (tokens.Count > 0)
+        {
+            await _expoPushService.SendPushAsync(tokens, title, message, new { type = "Payment", paymentId }, ct);
+        }
     }
 
     private static NotificationDto MapToDto(Notification n)

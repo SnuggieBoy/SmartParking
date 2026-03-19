@@ -8,51 +8,51 @@ namespace SmartParking.API.Models.ParkingLocation;
 /// </summary>
 public sealed class CreateParkingLocationRequest
 {
-    [Required(ErrorMessage = "Name is required")]
-    [StringLength(100, MinimumLength = 3, ErrorMessage = "Name must be between 3 and 100 characters")]
+    [Required(ErrorMessage = "Tên bãi xe là bắt buộc")]
+    [StringLength(100, MinimumLength = 3, ErrorMessage = "Tên phải từ 3 đến 100 ký tự")]
     public string Name { get; set; } = null!;
 
-    [StringLength(500, ErrorMessage = "Description cannot exceed 500 characters")]
+    [StringLength(500, ErrorMessage = "Mô tả không được quá 500 ký tự")]
     public string? Description { get; set; }
 
-    [Required(ErrorMessage = "Latitude is required")]
-    [Range(-90, 90, ErrorMessage = "Latitude must be between -90 and 90")]
+    [Required(ErrorMessage = "Vĩ độ là bắt buộc")]
+    [Range(-90, 90, ErrorMessage = "Vĩ độ phải từ -90 đến 90")]
     public double Latitude { get; set; }
 
-    [Required(ErrorMessage = "Longitude is required")]
-    [Range(-180, 180, ErrorMessage = "Longitude must be between -180 and 180")]
+    [Required(ErrorMessage = "Kinh độ là bắt buộc")]
+    [Range(-180, 180, ErrorMessage = "Kinh độ phải từ -180 đến 180")]
     public double Longitude { get; set; }
 
-    [Required(ErrorMessage = "Province is required")]
-    [StringLength(100, ErrorMessage = "Province cannot exceed 100 characters")]
+    [Required(ErrorMessage = "Tỉnh/TP là bắt buộc")]
+    [StringLength(100, ErrorMessage = "Tỉnh/TP không được quá 100 ký tự")]
     public string Province { get; set; } = null!;
 
-    [Required(ErrorMessage = "District is required")]
-    [StringLength(100, ErrorMessage = "District cannot exceed 100 characters")]
+    [Required(ErrorMessage = "Quận/Huyện là bắt buộc")]
+    [StringLength(100, ErrorMessage = "Quận/Huyện không được quá 100 ký tự")]
     public string District { get; set; } = null!;
 
-    [Required(ErrorMessage = "Ward is required")]
-    [StringLength(100, ErrorMessage = "Ward cannot exceed 100 characters")]
+    [Required(ErrorMessage = "Xã/Phường là bắt buộc")]
+    [StringLength(100, ErrorMessage = "Xã/Phường không được quá 100 ký tự")]
     public string Ward { get; set; } = null!;
 
-    [StringLength(200, ErrorMessage = "Street cannot exceed 200 characters")]
+    [StringLength(200, ErrorMessage = "Đường phố không được quá 200 ký tự")]
     public string? Street { get; set; }
 
-    [StringLength(100, ErrorMessage = "Area cannot exceed 100 characters")]
+    [StringLength(100, ErrorMessage = "Khu vực không được quá 100 ký tự")]
     public string? Area { get; set; }
 
-    [StringLength(500, ErrorMessage = "Full address cannot exceed 500 characters")]
+    [StringLength(500, ErrorMessage = "Địa chỉ đầy đủ không được quá 500 ký tự")]
     public string? FullAddress { get; set; }
 
-    [Required(ErrorMessage = "Total slots is required")]
-    [Range(1, 10000, ErrorMessage = "Total slots must be between 1 and 10000")]
+    [Required(ErrorMessage = "Tổng số chỗ là bắt buộc")]
+    [Range(1, 10000, ErrorMessage = "Tổng số chỗ phải từ 1 đến 10000")]
     public int TotalSlots { get; set; }
 
-    [Required(ErrorMessage = "Available slots is required")]
-    [Range(0, 10000, ErrorMessage = "Available slots must be between 0 and 10000")]
+    [Required(ErrorMessage = "Số chỗ trống là bắt buộc")]
+    [Range(0, 10000, ErrorMessage = "Số chỗ trống phải từ 0 đến 10000")]
     public int AvailableSlots { get; set; }
 
-    [Required(ErrorMessage = "Price per hour is required")]
-    [Range(0, 1000000, ErrorMessage = "Price per hour must be between 0 and 1,000,000")]
+    [Required(ErrorMessage = "Giá mỗi giờ là bắt buộc")]
+    [Range(0, 1000000, ErrorMessage = "Giá mỗi giờ phải từ 0 đến 1.000.000")]
     public decimal PricePerHour { get; set; }
 }
